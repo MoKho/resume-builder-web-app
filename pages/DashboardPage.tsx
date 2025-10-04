@@ -1,0 +1,75 @@
+
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import Layout from '../components/Layout';
+import { useAuth } from '../hooks/useAuth';
+import { useToast } from '../hooks/useToast';
+import { createApplication } from '../services/api';
+import LoadingSpinner from '../components/LoadingSpinner';
+
+const DashboardPage: React.FC = () => {
+  const [jobDescription, setJobDescription] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const { session } = useAuth();
+  const { addToast } = useToast();
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!jobDescription.trim()) {
+      addToast('Please paste a job description.', 'error');
+      return;
+    }
+    if (!session) return;
+
+    setIsSubmitting(true);
+    try {
+      const applicationData = {
+        target_job_description: jobDescription,
+      };
+      const response = await createApplication(session.access_token, applicationData);
+      addToast('Application started! We are now tailoring your resume.', 'success');
+      navigate(`/application/${response.id}`);
+    } catch (error: any) {
+      addToast(error.message || 'Failed to start application.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Layout>
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-4xl font-bold text-slate-100 mb-2">Tailor Your Resume</h1>
+        <p className="text-lg text-slate-400 mb-8">Paste a job description below to get started.</p>
+        
+        <form onSubmit={handleSubmit} className="space-y-8">
+          <div className="p-6 bg-slate-800 rounded-lg shadow-lg">
+            <label htmlFor="job-description" className="block text-lg font-medium text-slate-300 mb-2">
+              Job Description
+            </label>
+            <textarea
+              id="job-description"
+              rows={12}
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
+              placeholder="Paste the full job description here..."
+              className="w-full p-3 bg-slate-900 border border-slate-700 rounded-md text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+            />
+          </div>
+          
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-teal-600 hover:bg-teal-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 focus:ring-offset-slate-900 disabled:bg-teal-800 disabled:cursor-not-allowed transition-colors"
+          >
+            {isSubmitting ? <LoadingSpinner size="sm" /> : 'Customize My Resume'}
+          </button>
+        </form>
+      </div>
+    </Layout>
+  );
+};
+
+export default DashboardPage;
