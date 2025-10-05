@@ -13,8 +13,7 @@ import Step2DetailsPage from './pages/wizard/Step2DetailsPage';
 import ApplicationStatusPage from './pages/ApplicationStatusPage';
 import ResultsPage from './pages/ResultsPage';
 import LoadingPage from './pages/LoadingPage';
-
-const API_BASE_URL = 'https://resume-api-backend.onrender.com';
+import { API_BASE_URL } from './services/api';
 
 function App() {
   useEffect(() => {

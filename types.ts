@@ -25,6 +25,10 @@ export interface ResumeUpload {
   resume_text: string;
 }
 
+export interface ResumeTextResponse {
+  resume_text: string;
+}
+
 export interface ApplicationCreate {
   target_job_description: string;
 }

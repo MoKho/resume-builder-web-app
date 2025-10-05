@@ -1,30 +1,41 @@
-
 import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import type { JobHistoryResponse, JobHistoryUpdate } from '../../types';
-import { updateJobHistories } from '../../services/api';
+import { updateJobHistories, getAllJobHistories } from '../../services/api';
 import Logo from '../../components/Logo';
 import LoadingSpinner from '../../components/LoadingSpinner';
 
 const Step2DetailsPage: React.FC = () => {
-  const location = useLocation();
   const navigate = useNavigate();
   const { session } = useAuth();
   const { addToast } = useToast();
 
   const [jobHistories, setJobHistories] = useState<JobHistoryResponse[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [originalJobHistories, setOriginalJobHistories] = useState<JobHistoryResponse[]>([]);
+  const [isLoading, setIsLoading] = useState(false); // For submit button
+  const [isFetching, setIsFetching] = useState(true); // For initial page load
 
   useEffect(() => {
-    if (location.state?.jobHistories) {
-      setJobHistories(location.state.jobHistories);
-    } else {
-      addToast('No job history found. Please go back to step 1.', 'error');
-      navigate('/wizard/step-1');
-    }
-  }, [location.state, navigate, addToast]);
+    if (!session) return;
+
+    const fetchJobHistories = async () => {
+      setIsFetching(true);
+      try {
+        const data = await getAllJobHistories(session.access_token);
+        setJobHistories(data);
+        setOriginalJobHistories(JSON.parse(JSON.stringify(data))); // Deep copy for comparison
+      } catch (error: any) {
+        addToast(error.message || 'Failed to fetch job history.', 'error');
+        navigate('/wizard/step-1');
+      } finally {
+        setIsFetching(false);
+      }
+    };
+    
+    fetchJobHistories();
+  }, [session, navigate, addToast]);
 
   const handleInputChange = (id: number, field: 'detailed_background' | 'is_default_rewrite', value: string | boolean) => {
     setJobHistories(prev =>
@@ -36,13 +47,31 @@ const Step2DetailsPage: React.FC = () => {
 
   const handleFinish = async () => {
     if (!session) return;
-    setIsLoading(true);
-    try {
-      const updates: JobHistoryUpdate[] = jobHistories.map(job => ({
+
+    const updates: JobHistoryUpdate[] = jobHistories
+      .filter(currentJob => {
+        const originalJob = originalJobHistories.find(oj => oj.id === currentJob.id);
+        if (!originalJob) return false;
+        // Compare the fields that can be changed
+        return (
+          (currentJob.detailed_background || '') !== (originalJob.detailed_background || '') ||
+          !!currentJob.is_default_rewrite !== !!originalJob.is_default_rewrite
+        );
+      })
+      .map(job => ({
         id: job.id,
         detailed_background: job.detailed_background,
         is_default_rewrite: job.is_default_rewrite,
       }));
+
+    if (updates.length === 0) {
+      addToast('No changes detected.', 'info');
+      navigate('/dashboard');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
       await updateJobHistories(session.access_token, updates);
       addToast('Profile updated successfully!', 'success');
       navigate('/dashboard');
@@ -52,6 +81,18 @@ const Step2DetailsPage: React.FC = () => {
       setIsLoading(false);
     }
   };
+
+  if (isFetching) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
+        <Logo />
+        <div className="my-8">
+          <LoadingSpinner size="lg" />
+        </div>
+        <p className="text-slate-400">Loading your job history...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center p-4">

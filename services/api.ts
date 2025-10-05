@@ -1,7 +1,7 @@
 
-import type { ApplicationCreate, ApplicationResponse, JobHistoryResponse, JobHistoryUpdate, ProfileResponse, ResumeUpload } from './types';
+import type { ApplicationCreate, ApplicationResponse, JobHistoryResponse, JobHistoryUpdate, ProfileResponse, ResumeUpload, ResumeTextResponse } from './types';
 
-const API_BASE_URL = 'https://resume-api-backend.onrender.com';
+export const API_BASE_URL = 'https://api.p-q.app';
 
 async function apiFetch<T,>(path: string, token: string, options: RequestInit = {}): Promise<T> {
   const headers = {
@@ -33,6 +33,10 @@ export const processResume = (token: string, data: ResumeUpload): Promise<JobHis
     method: 'POST',
     body: JSON.stringify(data),
   });
+};
+
+export const getResumeText = (token: string): Promise<ResumeTextResponse> => {
+    return apiFetch('/profiles/resume-text', token, { method: 'GET' });
 };
 
 export const getAllJobHistories = (token: string): Promise<JobHistoryResponse[]> => {
