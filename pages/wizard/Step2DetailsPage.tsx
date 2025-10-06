@@ -101,39 +101,12 @@ const Step2DetailsPage: React.FC = () => {
             <Logo />
             <h1 className="text-3xl font-bold mt-4">Enhance Your Job History</h1>
             <p className="text-slate-400 mt-2">Step 2 of 2: Add details and select defaults for tailoring.</p>
+            <p className="text-slate-500 mt-4 max-w-3xl mx-auto">
+              Providing extra context, such as project details, specific metrics, or team dynamics, helps our AI understand the full scope of your achievements. This rich detail allows for a more impactful and accurately tailored resume.
+            </p>
         </div>
 
-        <div className="space-y-4">
-            {jobHistories.map(job => (
-                <div key={job.id} className="bg-slate-800 p-6 rounded-lg shadow-lg">
-                    <div className="flex justify-between items-start mb-4">
-                        <div>
-                            <h3 className="text-xl font-bold text-slate-100">{job.job_title}</h3>
-                            <p className="text-md text-slate-400">{job.company_name}</p>
-                        </div>
-                        <div className="flex items-center">
-                            <input
-                                id={`default-${job.id}`}
-                                type="checkbox"
-                                checked={!!job.is_default_rewrite}
-                                onChange={e => handleInputChange(job.id, 'is_default_rewrite', e.target.checked)}
-                                className="h-5 w-5 rounded border-slate-500 bg-slate-900 text-teal-600 focus:ring-teal-500 cursor-pointer"
-                            />
-                            <label htmlFor={`default-${job.id}`} className="ml-2 text-sm text-slate-300">Default for tailoring</label>
-                        </div>
-                    </div>
-                    <textarea
-                        value={job.detailed_background || ''}
-                        onChange={e => handleInputChange(job.id, 'detailed_background', e.target.value)}
-                        placeholder="Add more details, achievements, or context about this role..."
-                        rows={4}
-                        className="w-full p-3 bg-slate-900 border border-slate-700 rounded-md text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    />
-                </div>
-            ))}
-        </div>
-        
-        <div className="flex justify-between mt-6">
+        <div className="flex justify-end mb-8 space-x-4">
           <button
             onClick={handleBack}
             disabled={isLoading}
@@ -148,6 +121,57 @@ const Step2DetailsPage: React.FC = () => {
           >
             {isLoading ? <LoadingSpinner size="sm" /> : 'Save and Finish'}
           </button>
+        </div>
+
+        <div className="space-y-6">
+            {jobHistories.map(job => (
+                <div key={job.id} className="bg-slate-800 p-6 rounded-lg shadow-lg">
+                    {/* Row 1: Title, Company, and Checkbox */}
+                    <div className="flex flex-col md:flex-row justify-between md:items-start gap-4">
+                        <div>
+                            <h3 className="text-xl font-bold text-slate-100">{job.job_title}</h3>
+                            <p className="text-md text-slate-400">{job.company_name}</p>
+                        </div>
+                        <div className="flex items-center flex-shrink-0">
+                            <input
+                                id={`default-${job.id}`}
+                                type="checkbox"
+                                checked={!!job.is_default_rewrite}
+                                onChange={e => handleInputChange(job.id, 'is_default_rewrite', e.target.checked)}
+                                className="h-5 w-5 rounded border-slate-500 bg-slate-900 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                            />
+                            <label htmlFor={`default-${job.id}`} className="ml-2 text-sm text-slate-300">Default for tailoring</label>
+                        </div>
+                    </div>
+
+                    {/* Row 2: Achievements and Textarea */}
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Left side: Achievements */}
+                        <div>
+                            {job.achievements_list && job.achievements_list.length > 0 && (
+                                <div className="bg-slate-900/50 p-3 rounded-md border border-slate-700 h-full">
+                                    <h4 className="text-sm font-semibold text-slate-300 mb-2">Key Achievements from Resume:</h4>
+                                    <ul className="list-disc list-inside text-slate-400 text-sm space-y-1 pl-2">
+                                        {job.achievements_list.map((achievement, index) => (
+                                            <li key={index}>{achievement}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                        {/* Right side: Textarea */}
+                        <div>
+                            <textarea
+                                value={job.detailed_background || ''}
+                                onChange={e => handleInputChange(job.id, 'detailed_background', e.target.value)}
+                                placeholder="Add more details, achievements, or context about this role..."
+                                rows={6}
+                                className="styled-scrollbar w-full h-full min-h-[150px] p-3 bg-slate-900 border border-slate-700 rounded-md text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            />
+                        </div>
+                    </div>
+                </div>
+            ))}
         </div>
       </div>
     </div>

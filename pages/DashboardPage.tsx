@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { createApplication } from '../services/api';
+import { createApplication, checkResume } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 const DashboardPage: React.FC = () => {
@@ -28,9 +28,17 @@ const DashboardPage: React.FC = () => {
       const applicationData = {
         target_job_description: jobDescription,
       };
-      const response = await createApplication(session.access_token, applicationData);
+      const applicationResponse = await createApplication(session.access_token, applicationData);
+      
+      const checkData = {
+        job_post: jobDescription,
+      };
+      const analysisResponse = await checkResume(session.access_token, checkData);
+
       addToast('Application started! We are now tailoring your resume.', 'success');
-      navigate(`/application/${response.id}`);
+      navigate(`/application/${applicationResponse.id}`, {
+        state: { analysis: analysisResponse.analysis },
+      });
     } catch (error: any) {
       addToast(error.message || 'Failed to start application.', 'error');
     } finally {

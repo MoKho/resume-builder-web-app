@@ -41,3 +41,13 @@ export interface ApplicationResponse {
   final_resume_text: string | null;
   created_at: string;
 }
+
+export interface ResumeCheckRequest {
+  job_post: string;
+  resume_text?: string | null;
+  summarize_job_post?: boolean | null;
+}
+
+export interface ResumeCheckResponse {
+  analysis: string;
+}

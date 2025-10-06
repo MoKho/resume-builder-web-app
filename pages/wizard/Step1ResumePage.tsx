@@ -82,26 +82,7 @@ const Step1ResumePage: React.FC = () => {
           <p className="text-slate-400 mt-2">Step 1 of 2: Provide Your Master Resume</p>
         </div>
         
-        <div className="bg-slate-800 p-8 rounded-lg shadow-lg relative">
-           {isFetchingResume && (
-            <div className="absolute inset-0 bg-slate-800/70 flex justify-center items-center rounded-lg z-10">
-              <LoadingSpinner size="md" />
-            </div>
-          )}
-          <textarea
-            value={resumeText}
-            onChange={(e) => setResumeText(e.target.value)}
-            placeholder={
-                isFetchingResume 
-                ? "Loading your resume..." 
-                : "Paste your full resume here..."
-            }
-            className="w-full h-96 p-4 bg-slate-900 border border-slate-700 rounded-md text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
-            disabled={isLoading || isFetchingResume}
-          />
-        </div>
-        
-        <div className="flex justify-end mt-6 space-x-4">
+        <div className="flex justify-end mb-6 space-x-4">
           <button
             onClick={handleCancel}
             disabled={isLoading || !profile?.has_base_resume}
@@ -117,6 +98,26 @@ const Step1ResumePage: React.FC = () => {
             {isLoading ? <LoadingSpinner size="sm" /> : 'Next'}
           </button>
         </div>
+
+        <div className="bg-slate-800 p-8 rounded-lg shadow-lg relative">
+           {isFetchingResume && (
+            <div className="absolute inset-0 bg-slate-800/70 flex justify-center items-center rounded-lg z-10">
+              <LoadingSpinner size="md" />
+            </div>
+          )}
+          <textarea
+            value={resumeText}
+            onChange={(e) => setResumeText(e.target.value)}
+            placeholder={
+                isFetchingResume 
+                ? "Loading your resume..." 
+                : "Paste your full resume here..."
+            }
+            className="styled-scrollbar w-full h-96 p-4 bg-slate-900 border border-slate-700 rounded-md text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
+            disabled={isLoading || isFetchingResume}
+          />
+        </div>
+        
       </div>
     </div>
   );

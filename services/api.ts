@@ -1,5 +1,5 @@
 
-import type { ApplicationCreate, ApplicationResponse, JobHistoryResponse, JobHistoryUpdate, ProfileResponse, ResumeUpload, ResumeTextResponse } from './types';
+import type { ApplicationCreate, ApplicationResponse, JobHistoryResponse, JobHistoryUpdate, ProfileResponse, ResumeUpload, ResumeTextResponse, ResumeCheckRequest, ResumeCheckResponse } from './types';
 
 export const API_BASE_URL = 'https://api.p-q.app';
 
@@ -47,6 +47,13 @@ export const updateJobHistories = (token: string, updates: JobHistoryUpdate[]): 
   return apiFetch('/profiles/job-histories', token, {
     method: 'PATCH',
     body: JSON.stringify(updates),
+  });
+};
+
+export const checkResume = (token: string, data: ResumeCheckRequest): Promise<ResumeCheckResponse> => {
+  return apiFetch('/profiles/check-resume', token, {
+    method: 'POST',
+    body: JSON.stringify(data),
   });
 };
 
