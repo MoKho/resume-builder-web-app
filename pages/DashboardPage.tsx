@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { createApplication, checkResume } from '../services/api';
+import { createApplication, startResumeCheck } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 const DashboardPage: React.FC = () => {
@@ -25,19 +25,24 @@ const DashboardPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const applicationData = {
+      // Kick off both requests in parallel for efficiency
+      const applicationPromise = createApplication(session.access_token, {
         target_job_description: jobDescription,
-      };
-      const applicationResponse = await createApplication(session.access_token, applicationData);
+      });
       
-      const checkData = {
+      const checkPromise = startResumeCheck(session.access_token, {
         job_post: jobDescription,
-      };
-      const analysisResponse = await checkResume(session.access_token, checkData);
+      });
+
+      // Wait for both to complete
+      const [applicationResponse, checkResponse] = await Promise.all([applicationPromise, checkPromise]);
 
       addToast('Application started! We are now tailoring your resume.', 'success');
       navigate(`/application/${applicationResponse.id}`, {
-        state: { analysis: analysisResponse.analysis },
+        state: { 
+          resumeCheckJobId: checkResponse.job_id,
+          jobDescription: jobDescription,
+        },
       });
     } catch (error: any) {
       addToast(error.message || 'Failed to start application.', 'error');

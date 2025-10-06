@@ -48,6 +48,11 @@ export interface ResumeCheckRequest {
   summarize_job_post?: boolean | null;
 }
 
-export interface ResumeCheckResponse {
-  analysis: string;
+export interface ResumeCheckJobResponse {
+  job_id: string;
+}
+
+export interface ResumeCheckResultResponse {
+  status: 'pending' | 'completed' | 'failed';
+  analysis: string | null;
 }
