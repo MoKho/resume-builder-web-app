@@ -1,5 +1,5 @@
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { HashRouter, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
@@ -13,26 +13,8 @@ import Step2DetailsPage from './pages/wizard/Step2DetailsPage';
 import ApplicationStatusPage from './pages/ApplicationStatusPage';
 import ResultsPage from './pages/ResultsPage';
 import LoadingPage from './pages/LoadingPage';
-import { API_BASE_URL } from './services/api';
 
 function App() {
-  useEffect(() => {
-    const keepAlive = () => {
-      // This fetch request is to keep the free Render backend instance from sleeping.
-      console.log('Keep Alive')
-      fetch(`${API_BASE_URL}/`).catch(err => {
-        // We can silently fail here. The main app functionality will handle API errors when it matters.
-        console.error('Keep-alive ping failed:', err);
-      });
-    };
-    
-    // Ping immediately on load, then every 48 seconds.
-    keepAlive();
-    const intervalId = setInterval(keepAlive, 48000);
-
-    return () => clearInterval(intervalId);
-  }, []);
-
   return (
     <AuthProvider>
       <ToastProvider>

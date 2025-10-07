@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Layout from '../components/Layout';
@@ -26,6 +25,7 @@ const ResultsPage: React.FC = () => {
 
   const [isLoadingNewAnalysis, setIsLoadingNewAnalysis] = useState(true);
   const analysisIntervalRef = useRef<number | null>(null);
+  const analysisStartedRef = useRef(false); // Ref to track if analysis has been initiated
 
   const parseMarkdown = async (markdown: string | null): Promise<string> => {
     if (!markdown || typeof markdown !== 'string') return '';
@@ -65,7 +65,9 @@ const ResultsPage: React.FC = () => {
         }
 
         const jobDescription = location.state?.jobDescription;
-        if (appData?.final_resume_text && jobDescription) {
+        if (appData?.final_resume_text && jobDescription && !analysisStartedRef.current) {
+          analysisStartedRef.current = true; // Prevent this block from running again on re-renders
+          
           const checkJob = await startResumeCheck(session.access_token, {
             job_post: jobDescription,
             resume_text: appData.final_resume_text,
@@ -87,7 +89,8 @@ const ResultsPage: React.FC = () => {
           pollNewAnalysis();
           analysisIntervalRef.current = window.setInterval(pollNewAnalysis, 3000);
 
-        } else {
+        } else if (!appData?.final_resume_text || !jobDescription) {
+           // This case handles when analysis can't be started due to missing data.
           setIsLoadingNewAnalysis(false);
           setNewAnalysisHtml('<p>Analysis could not be performed due to missing data.</p>');
         }
