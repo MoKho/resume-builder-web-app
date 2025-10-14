@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
@@ -9,6 +8,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import Logo from '../components/Logo';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import ScoreDisplay from '../components/ScoreDisplay';
 
 const loadingMessages = [
   "Analyzing job description...",
@@ -30,6 +30,8 @@ const ApplicationStatusPage: React.FC = () => {
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
   const [analysisHtml, setAnalysisHtml] = useState('');
   const [isAnalysisLoading, setIsAnalysisLoading] = useState(true);
+  const [initialScore, setInitialScore] = useState<number | null>(null);
+  const [initialRawScoreCsv, setInitialRawScoreCsv] = useState<string | null>(null);
 
   const initialAnalysisRef = useRef<string | null>(null);
   const appStatusIntervalRef = useRef<number | null>(null);
@@ -54,6 +56,8 @@ const ApplicationStatusPage: React.FC = () => {
             const rawHtml = await marked.parse(response.analysis, { async: true, gfm: true, breaks: true });
             setAnalysisHtml(DOMPurify.sanitize(rawHtml));
           }
+          setInitialScore(response.score);
+          setInitialRawScoreCsv(response.raw_score_csv);
           setIsAnalysisLoading(false);
         } else if (response.status === 'failed') {
           if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
@@ -94,6 +98,8 @@ const ApplicationStatusPage: React.FC = () => {
           navigate(`/results/${applicationId}`, {
             state: {
                 initialAnalysis: initialAnalysisRef.current,
+                initialScore: initialScore,
+                initialRawScoreCsv: initialRawScoreCsv,
                 jobDescription: location.state?.jobDescription,
             }
           });
@@ -122,40 +128,46 @@ const ApplicationStatusPage: React.FC = () => {
       if (appStatusIntervalRef.current) clearInterval(appStatusIntervalRef.current);
       if (messageIntervalRef.current) clearInterval(messageIntervalRef.current);
     };
-  }, [id, session, navigate, addToast, location.state?.jobDescription]);
+  }, [id, session, navigate, addToast, location.state?.jobDescription, initialScore, initialRawScoreCsv]);
 
   return (
     <div className="flex flex-col justify-center items-center min-h-screen bg-slate-900 text-slate-100 p-4">
         <div className="w-full max-w-4xl mx-auto flex-grow flex flex-col justify-center">
+             <div className="flex items-center justify-center space-x-3 p-3 mb-8 bg-slate-800/50 rounded-lg">
+                <LoadingSpinner size="sm" />
+                <div className="text-left">
+                    <h2 className="text-xl font-bold text-slate-100">Tailoring in Progress...</h2>
+                    <p className="text-slate-400 mt-1 text-base transition-opacity duration-500">
+                        {loadingMessages[currentMessageIndex]}
+                    </p>
+                </div>
+            </div>
+
             <div className="text-left mb-6">
                 <h1 className="text-3xl font-bold text-slate-100">Initial Resume Analysis</h1>
                 <p className="text-slate-400">Here's how your current resume stacks up against the job description.</p>
             </div>
-            <div className="bg-slate-800 p-6 rounded-lg shadow-lg text-left mb-8 min-h-[300px] flex flex-col">
+            <div className="bg-slate-800 p-6 rounded-lg shadow-lg text-left min-h-[300px] flex flex-col">
               {isAnalysisLoading ? (
                 <div className="flex-grow flex flex-col justify-center items-center">
                     <LoadingSpinner />
                     <p className="mt-4 text-slate-400">Analyzing your resume...</p>
                 </div>
-              ) : analysisHtml ? (
-                <div
-                  className="styled-scrollbar prose prose-sm sm:prose-base prose-invert max-w-none text-slate-300 leading-relaxed overflow-auto max-h-[50vh] prose-headings:text-slate-100 prose-a:text-teal-400 hover:prose-a:text-teal-300 prose-strong:text-slate-100 prose-ul:list-disc prose-ul:pl-6 prose-li:marker:text-teal-400"
-                  dangerouslySetInnerHTML={{ __html: analysisHtml }}
-                />
               ) : (
-                <div className="flex-grow flex flex-col justify-center items-center text-slate-400">
-                    <p>Could not load resume analysis.</p>
-                </div>
+                <>
+                  <ScoreDisplay label="Match Score" score={initialScore} rawCsv={initialRawScoreCsv} />
+                  {analysisHtml ? (
+                    <div
+                      className="analysis-content styled-scrollbar prose prose-sm sm:prose-base prose-invert max-w-none text-slate-300 leading-relaxed overflow-auto flex-grow"
+                      dangerouslySetInnerHTML={{ __html: analysisHtml }}
+                    />
+                  ) : (
+                    <div className="flex-grow flex flex-col justify-center items-center text-slate-400">
+                        <p>Could not load resume analysis.</p>
+                    </div>
+                  )}
+                </>
               )}
-            </div>
-            <div className="flex items-center justify-center space-x-4 p-4 bg-slate-800/50 rounded-lg">
-                <LoadingSpinner size="md" />
-                <div className="text-left">
-                    <h2 className="text-2xl font-bold text-slate-100">Tailoring in Progress...</h2>
-                    <p className="text-slate-400 mt-1 text-lg transition-opacity duration-500">
-                        {loadingMessages[currentMessageIndex]}
-                    </p>
-                </div>
             </div>
         </div>
     </div>

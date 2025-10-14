@@ -8,6 +8,7 @@ import type { ApplicationResponse } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import ScoreDisplay from '../components/ScoreDisplay';
 
 const ResultsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +23,11 @@ const ResultsPage: React.FC = () => {
   const [tailoredResumeHtml, setTailoredResumeHtml] = useState('');
   const [initialAnalysisHtml, setInitialAnalysisHtml] = useState('');
   const [newAnalysisHtml, setNewAnalysisHtml] = useState('');
+  
+  const [initialScore, setInitialScore] = useState<number | null>(null);
+  const [initialRawScoreCsv, setInitialRawScoreCsv] = useState<string | null>(null);
+  const [newScore, setNewScore] = useState<number | null>(null);
+  const [newRawScoreCsv, setNewRawScoreCsv] = useState<string | null>(null);
 
   const [isLoadingNewAnalysis, setIsLoadingNewAnalysis] = useState(true);
   const analysisIntervalRef = useRef<number | null>(null);
@@ -47,13 +53,15 @@ const ResultsPage: React.FC = () => {
         return;
     };
 
-    const processInitialAnalysis = async () => {
-      const markdown = location.state?.initialAnalysis;
-      if (markdown) {
-        setInitialAnalysisHtml(await parseMarkdown(markdown));
+    const processInitialData = async () => {
+      const { initialAnalysis, initialScore, initialRawScoreCsv } = location.state || {};
+      if (initialAnalysis) {
+        setInitialAnalysisHtml(await parseMarkdown(initialAnalysis));
       }
+      setInitialScore(initialScore ?? null);
+      setInitialRawScoreCsv(initialRawScoreCsv ?? null);
     };
-    processInitialAnalysis();
+    processInitialData();
 
     const fetchAllData = async () => {
       try {
@@ -78,6 +86,8 @@ const ResultsPage: React.FC = () => {
               if (result.status === 'completed') {
                 if(analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
                 setNewAnalysisHtml(await parseMarkdown(result.analysis));
+                setNewScore(result.score);
+                setNewRawScoreCsv(result.raw_score_csv);
                 setIsLoadingNewAnalysis(false);
               } else if (result.status === 'failed') {
                 if(analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
@@ -170,42 +180,34 @@ const ResultsPage: React.FC = () => {
         </div>
 
         <div className="mt-12 border-t border-slate-700 pt-8">
-            <h2 className="text-3xl font-bold text-center text-slate-100 mb-8">Resume Analysis Comparison</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div>
-                    <h3 className="text-xl font-semibold text-slate-200 mb-3 text-center">Original Resume Analysis</h3>
-                    <div className="bg-slate-800 p-4 rounded-lg shadow-inner h-96">
-                        {initialAnalysisHtml ? (
-                            <div
-                                className="styled-scrollbar prose prose-sm prose-invert max-w-none text-slate-300 h-full overflow-auto prose-headings:text-slate-200 prose-a:text-teal-400"
-                                dangerouslySetInnerHTML={{ __html: initialAnalysisHtml }}
-                            />
-                        ) : (
-                            <div className="flex items-center justify-center h-full text-slate-400">
-                                <p>Original analysis not available.</p>
-                            </div>
-                        )}
-                    </div>
+            <h2 className="text-3xl font-bold text-center text-slate-100 mb-8">Resume Analysis & Score Improvement</h2>
+            
+            <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
+                <div className="flex flex-col sm:flex-row justify-around items-center mb-6 pb-6 border-b border-slate-700 gap-4">
+                    <ScoreDisplay label="Original Score" score={initialScore} rawCsv={initialRawScoreCsv} />
+                    
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-green-400 hidden sm:block transform sm:rotate-0 rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                    </svg>
+                    
+                    <ScoreDisplay label="Tailored Score" score={newScore} rawCsv={newRawScoreCsv} />
                 </div>
-
-                <div>
-                    <h3 className="text-xl font-semibold text-slate-200 mb-3 text-center">Tailored Resume Analysis</h3>
-                    <div className="bg-slate-800 p-4 rounded-lg shadow-inner h-96">
-                        {isLoadingNewAnalysis ? (
-                            <div className="flex items-center justify-center h-full">
-                                <LoadingSpinner />
-                            </div>
-                        ) : (
-                            <div
-                                className="styled-scrollbar prose prose-sm prose-invert max-w-none text-slate-300 h-full overflow-auto prose-headings:text-slate-200 prose-a:text-teal-400"
-                                dangerouslySetInnerHTML={{ __html: newAnalysisHtml }}
-                            />
-                        )}
-                    </div>
+                
+                <div className="min-h-[24rem] flex flex-col">
+                    <h3 className="text-xl font-semibold text-slate-200 mb-4">Tailored Resume Analysis</h3>
+                    {isLoadingNewAnalysis ? (
+                        <div className="flex-grow flex items-center justify-center">
+                            <LoadingSpinner />
+                        </div>
+                    ) : (
+                      <div
+                          className="analysis-content styled-scrollbar prose prose-sm prose-invert max-w-none text-slate-300 overflow-auto flex-grow"
+                          dangerouslySetInnerHTML={{ __html: newAnalysisHtml }}
+                      />
+                    )}
                 </div>
             </div>
         </div>
-
       </div>
     </Layout>
   );

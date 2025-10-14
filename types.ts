@@ -55,4 +55,6 @@ export interface ResumeCheckJobResponse {
 export interface ResumeCheckResultResponse {
   status: 'pending' | 'completed' | 'failed';
   analysis: string | null;
+  score: number | null;
+  raw_score_csv: string | null;
 }
