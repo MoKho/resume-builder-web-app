@@ -1,5 +1,4 @@
-
-import type { ApplicationCreate, ApplicationResponse, JobHistoryResponse, JobHistoryUpdate, ProfileResponse, ResumeUpload, ResumeTextResponse, ResumeCheckRequest, ResumeCheckJobResponse, ResumeCheckResultResponse } from './types';
+import type { ApplicationCreate, ApplicationResponse, JobHistoryResponse, JobHistoryUpdate, ProfileResponse, ResumeUpload, ResumeTextResponse, ResumeCheckRequest, ResumeCheckJobResponse, ResumeCheckResultResponse, GoogleDriveAuthStatus, GoogleDriveAuthorizeUrl, GoogleDriveFileRequest, GoogleDriveFileResponse } from '../types';
 
 export const API_BASE_URL = 'https://api.p-q.app';
 
@@ -71,4 +70,21 @@ export const createApplication = (token: string, data: ApplicationCreate): Promi
 
 export const getApplication = (token: string, applicationId: number): Promise<ApplicationResponse> => {
   return apiFetch(`/applications/${applicationId}`, token, { method: 'GET' });
+};
+
+// Google Drive APIs
+export const getGoogleDriveAuthStatus = (token: string): Promise<GoogleDriveAuthStatus> => {
+  return apiFetch('/google-drive/auth-status', token, { method: 'GET' });
+};
+
+export const getGoogleDriveAuthorizeUrl = (token: string): Promise<GoogleDriveAuthorizeUrl> => {
+  return apiFetch('/google-drive/authorize', token, { method: 'GET' });
+};
+
+export const openGoogleDriveFile = (token: string, fileId: string): Promise<GoogleDriveFileResponse> => {
+  const data: GoogleDriveFileRequest = { fileId };
+  return apiFetch('/google-drive/open-file', token, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 };

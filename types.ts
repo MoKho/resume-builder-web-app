@@ -58,3 +58,21 @@ export interface ResumeCheckResultResponse {
   score: number | null;
   raw_score_csv: string | null;
 }
+
+// Google Drive Integration Types
+export interface GoogleDriveAuthStatus {
+  authenticated: boolean;
+  access_token?: string;
+}
+
+export interface GoogleDriveAuthorizeUrl {
+  authorization_url: string;
+}
+
+export interface GoogleDriveFileRequest {
+  fileId: string;
+}
+
+export interface GoogleDriveFileResponse {
+  text: string;
+}

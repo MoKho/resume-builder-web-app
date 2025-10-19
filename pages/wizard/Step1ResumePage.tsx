@@ -1,20 +1,133 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
-import { processResume, getResumeText } from '../../services/api';
+import { processResume, getResumeText, getGoogleDriveAuthStatus, getGoogleDriveAuthorizeUrl, openGoogleDriveFile, API_BASE_URL } from '../../services/api';
 import Logo from '../../components/Logo';
 import LoadingSpinner from '../../components/LoadingSpinner';
+import GoogleDriveIcon from '../../components/GoogleDriveIcon';
+import { useGooglePicker } from '../../hooks/useGooglePicker';
 
 const Step1ResumePage: React.FC = () => {
   const [resumeText, setResumeText] = useState('');
   const [originalResumeText, setOriginalResumeText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingResume, setIsFetchingResume] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  
+  const authCompleted = useRef(false);
   const { session, profile } = useAuth();
   const navigate = useNavigate();
   const { addToast } = useToast();
+  
+  const handleFileSelected = async (fileId: string | null) => {
+    if (!fileId) {
+      addToast('Import cancelled.', 'info');
+      setIsImporting(false);
+      return;
+    }
+    if (!session) return;
 
+    setIsImporting(true);
+    try {
+      const response = await openGoogleDriveFile(session.access_token, fileId);
+      setResumeText(response.text);
+      addToast('Resume imported successfully from Google Drive!', 'success');
+    } catch (error: any) {
+      addToast(error.message || 'Failed to import from Google Drive.', 'error');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+  
+  const { showPicker, isPickerApiLoaded } = useGooglePicker(handleFileSelected);
+
+  const handleImportFromDrive = useCallback(async () => {
+    if (!session) return;
+    setIsImporting(true);
+
+    try {
+      if (!isPickerApiLoaded) {
+        addToast("Google components are still loading, please try again in a moment.", "info");
+        setIsImporting(false);
+        return;
+      }
+
+      const status = await getGoogleDriveAuthStatus(session.access_token);
+      if (status.authenticated && status.access_token) {
+        showPicker(status.access_token);
+        setIsImporting(false);
+        return;
+      }
+      
+      // If not authenticated, start auth flow
+      authCompleted.current = false;
+      const { authorization_url } = await getGoogleDriveAuthorizeUrl(session.access_token);
+
+      const handleAuthMessage = (event: MessageEvent) => {
+        const API_ORIGIN = new URL(API_BASE_URL).origin;
+        if (event.origin !== API_ORIGIN) {
+          return;
+        }
+
+        const data = event.data || {};
+        if (data.type === 'google-drive-auth') {
+          window.removeEventListener('message', handleAuthMessage);
+          authCompleted.current = true;
+          
+          if (data.status === 'ok') {
+            addToast('Google Drive connected successfully!', 'success');
+            // Now that we're authed, re-check status and show picker
+            getGoogleDriveAuthStatus(session.access_token)
+              .then(newStatus => {
+                if (newStatus.authenticated && newStatus.access_token) {
+                  showPicker(newStatus.access_token);
+                } else {
+                  throw new Error("Auth succeeded but token not available.");
+                }
+              })
+              .catch(err => {
+                addToast(err.message || "Failed to get token after auth.", 'error');
+              })
+              .finally(() => {
+                setIsImporting(false);
+              });
+          } else {
+            addToast(data.error || 'Google Drive authentication failed.', 'error');
+            setIsImporting(false);
+          }
+        }
+      };
+
+      window.addEventListener('message', handleAuthMessage);
+
+      const authPopup = window.open(authorization_url, 'google-auth-popup', 'width=500,height=600');
+
+      if (authPopup) {
+        const timer = setInterval(() => {
+          if (authPopup.closed) {
+            clearInterval(timer);
+            window.removeEventListener('message', handleAuthMessage);
+            // Give a brief moment for the message to be processed if auth was successful
+            setTimeout(() => {
+              if (!authCompleted.current) {
+                addToast('Google Drive authentication cancelled.', 'info');
+                setIsImporting(false);
+              }
+            }, 200);
+          }
+        }, 500);
+      } else {
+        window.removeEventListener('message', handleAuthMessage);
+        addToast('Please enable popups for Google Drive authentication.', 'error');
+        setIsImporting(false);
+      }
+    } catch (error: any) {
+      addToast(error.message || 'Could not connect to Google Drive.', 'error');
+      setIsImporting(false);
+    }
+  }, [session, isPickerApiLoaded, addToast, showPicker]);
+  
   useEffect(() => {
     const fetchResume = async () => {
       if (session?.access_token && profile?.has_base_resume) {
@@ -49,15 +162,13 @@ const Step1ResumePage: React.FC = () => {
       const hasResumeChanged = resumeText.trim() !== originalResumeText.trim();
       
       if (hasResumeChanged || !profile?.has_base_resume) {
-        // If resume changed OR it's the user's first time (no base resume)
-        // we must process it to (re)generate job histories.
         await processResume(session.access_token, { resume_text: resumeText });
         addToast('Resume processed successfully!', 'success');
       }
       
-      // Navigate to the next step. Step 2 will fetch the latest job histories.
       navigate('/wizard/step-2');
-    } catch (error: any) {
+    } catch (error: any)
+      {
       addToast(error.message || 'Failed to process resume.', 'error');
     } finally {
       setIsLoading(false);
@@ -105,6 +216,21 @@ const Step1ResumePage: React.FC = () => {
               <LoadingSpinner size="md" />
             </div>
           )}
+
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-slate-400">Paste your resume or import from a Google Doc.</p>
+            <button
+                onClick={handleImportFromDrive}
+                disabled={isLoading || isFetchingResume || isImporting}
+                className="flex-shrink-0 flex items-center justify-center px-4 py-2 border border-slate-600 text-slate-300 rounded-md hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+                {isImporting ? 
+                  <LoadingSpinner size="sm"/> : 
+                  <><GoogleDriveIcon className="w-5 h-5 mr-2" /> Import from Drive</>
+                }
+            </button>
+          </div>
+
           <textarea
             value={resumeText}
             onChange={(e) => setResumeText(e.target.value)}
