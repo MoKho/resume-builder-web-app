@@ -1,9 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
 
+/// <reference types="vite/client" />
+
 // IMPORTANT: Replace these placeholder values with your actual Google API credentials.
 // You can obtain them from the Google Cloud Console.
-const GOOGLE_API_KEY = 'YOUR_GOOGLE_API_KEY_HERE';
-const GOOGLE_APP_ID = 'YOUR_GOOGLE_APP_ID_HERE';
+// Prefer Vite-style env vars (VITE_). Fall back to CRA-style REACT_APP_ for compatibility.
+const _env = (import.meta as any).env || {};
+// Read Google credentials only from environment. Do not fall back to inline placeholders.
+const GOOGLE_API_KEY = _env.VITE_GOOGLE_DEVELOPER_KEY || _env.REACT_APP_GOOGLE_DEVELOPER_KEY;
+const GOOGLE_CLIENT_ID = _env.VITE_GOOGLE_CLIENT_ID || _env.REACT_APP_GOOGLE_CLIENT_ID;
+
+// Warn loudly during development if placeholder values are still present so it's obvious
+// why Google's OAuth flow would fail with an invalid client_id.
+if (typeof window !== 'undefined') {
+  const missingCreds = !GOOGLE_CLIENT_ID || !GOOGLE_API_KEY;
+  if (missingCreds && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    // eslint-disable-next-line no-console
+    console.warn('[useGooglePicker] Google client ID or developer key missing. Set VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_DEVELOPER_KEY in your .env.');
+  }
+}
 
 // Fix: Augment the global Window interface to include `gapi` and `google` properties.
 // These are loaded from external scripts and this change informs TypeScript about their
@@ -20,6 +35,7 @@ type PickerCallback = (fileId: string | null) => void;
 export const useGooglePicker = (onFileSelect: PickerCallback) => {
   const [isPickerApiLoaded, setIsPickerApiLoaded] = useState(false);
   const [isGapiLoaded, setIsGapiLoaded] = useState(false);
+  const [isGISLoaded, setIsGISLoaded] = useState(false);
 
   // Load Google API script
   useEffect(() => {
@@ -33,6 +49,22 @@ export const useGooglePicker = (onFileSelect: PickerCallback) => {
     script.defer = true;
     script.onload = () => {
       window.gapi.load('client', () => setIsGapiLoaded(true));
+    };
+    document.body.appendChild(script);
+  }, []);
+
+  // Load GIS script
+  useEffect(() => {
+    if (window.google && window.google.accounts) {
+      setIsGISLoaded(true);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      setIsGISLoaded(true);
     };
     document.body.appendChild(script);
   }, []);
@@ -59,7 +91,6 @@ export const useGooglePicker = (onFileSelect: PickerCallback) => {
         .setMimeTypes('application/vnd.google-apps.document'); // Only Google Docs
         
     const picker = new window.google.picker.PickerBuilder()
-      .setAppId(GOOGLE_APP_ID)
       .setOAuthToken(oauthToken)
       .setDeveloperKey(GOOGLE_API_KEY)
       .addView(docsView)
@@ -75,5 +106,27 @@ export const useGooglePicker = (onFileSelect: PickerCallback) => {
     picker.setVisible(true);
   }, [isPickerApiLoaded, onFileSelect]);
 
-  return { showPicker, isPickerApiLoaded };
+  const getAccessToken = useCallback(() => {
+    if (!isGISLoaded) {
+      console.error('Google Identity Services not loaded.');
+      onFileSelect(null); // Indicate failure
+      return;
+    }
+
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/drive.readonly',
+      callback: (tokenResponse: any) => {
+        if (tokenResponse && tokenResponse.access_token) {
+          showPicker(tokenResponse.access_token);
+        } else {
+          console.error('Failed to retrieve access token.');
+          onFileSelect(null); // Indicate failure
+        }
+      },
+    });
+    tokenClient.requestAccessToken();
+  }, [isGISLoaded, showPicker, onFileSelect]);
+
+  return { isPickerApiLoaded, getAccessToken };
 };

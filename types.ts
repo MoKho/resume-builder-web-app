@@ -74,5 +74,6 @@ export interface GoogleDriveFileRequest {
 }
 
 export interface GoogleDriveFileResponse {
-  text: string;
+  content: string;
+  fileId: string;
 }
