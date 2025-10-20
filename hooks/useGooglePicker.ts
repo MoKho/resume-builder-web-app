@@ -9,6 +9,12 @@ const _env = (import.meta as any).env || {};
 const GOOGLE_API_KEY = _env.VITE_GOOGLE_DEVELOPER_KEY || _env.REACT_APP_GOOGLE_DEVELOPER_KEY;
 const GOOGLE_CLIENT_ID = _env.VITE_GOOGLE_CLIENT_ID || _env.REACT_APP_GOOGLE_CLIENT_ID;
 
+// Fail fast if credentials are missing
+if (!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) {
+  throw new Error(
+    '[useGooglePicker] Google API credentials missing: VITE_GOOGLE_CLIENT_ID and/or VITE_GOOGLE_DEVELOPER_KEY (or their REACT_APP_ equivalents) are not set in the environment.'
+  );
+}
 // Warn loudly during development if placeholder values are still present so it's obvious
 // why Google's OAuth flow would fail with an invalid client_id.
 if (typeof window !== 'undefined') {
