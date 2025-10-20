@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-
 /// <reference types="vite/client" />
+import { useState, useEffect, useCallback } from 'react';
 
 // IMPORTANT: Replace these placeholder values with your actual Google API credentials.
 // You can obtain them from the Google Cloud Console.
