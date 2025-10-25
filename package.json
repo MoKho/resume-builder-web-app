@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "start": "serve -s dist -p 8080",
+  "build": "vite build",
+  "start": "serve -s dist -p $PORT",
     "preview": "vite preview"
   },
   "dependencies": {
