@@ -59,59 +59,97 @@ const Step1ResumePage: React.FC = () => {
         return;
       }
 
-      // Start auth flow to ensure consent and refresh token are saved server-side
-      const { authorization_url } = await getGoogleDriveAuthorizeUrl(session.access_token);
-      const authSuccessful = await new Promise<boolean>((resolve) => {
-        const handleAuthMessage = (event: MessageEvent) => {
-          const API_ORIGIN = new URL(API_BASE_URL).origin;
-          if (event.origin !== API_ORIGIN) {
-            return;
-          }
+      // Start auth flow to ensure consent and refresh token are saved server-side.
+      // Always fetch a fresh authorize URL immediately before opening the popup.
+      // If the popup reports an "invalid state" error, automatically retry a
+      // small number of times by fetching a new URL and reopening the popup.
+      const MAX_RETRIES = 2;
 
-          const data = event.data || {};
-          if (data.type === 'google-drive-auth') {
-            window.removeEventListener('message', handleAuthMessage);
-            if (data.status === 'ok') {
-              addToast('Google Drive connected successfully!', 'success');
-              resolve(true);
+      const tryAuthorizeOnce = async (): Promise<{ success: boolean; invalidState?: boolean }> => {
+        try {
+          const { authorization_url } = await getGoogleDriveAuthorizeUrl(session.access_token);
+
+          return await new Promise((resolve) => {
+            let resolved = false;
+            const API_ORIGIN = new URL(API_BASE_URL).origin;
+
+            const handleAuthMessage = (event: MessageEvent) => {
+              if (event.origin !== API_ORIGIN) return;
+
+              const data = event.data || {};
+              if (data.type === 'google-drive-auth') {
+                // Ensure we only resolve once and clean up.
+                if (resolved) return;
+                resolved = true;
+                window.removeEventListener('message', handleAuthMessage);
+                if (data.status === 'ok') {
+                  addToast('Google Drive connected successfully!', 'success');
+                  resolve({ success: true });
+                } else {
+                  // If backend indicates an invalid state (CSRF/state mismatch), indicate for retry.
+                  const err = (data.error || '').toString().toLowerCase();
+                  const isInvalidState = err.includes('invalid state') || err.includes('invalid_state');
+                  if (isInvalidState) {
+                    // Do not show a toast for invalid state here; we'll retry silently.
+                    resolve({ success: false, invalidState: true });
+                  } else {
+                    addToast(data.error || 'Google Drive authentication failed.', 'error');
+                    resolve({ success: false });
+                  }
+                }
+              }
+            };
+
+            window.addEventListener('message', handleAuthMessage);
+
+            const authPopup = window.open(authorization_url, 'google-auth-popup', 'width=500,height=600');
+
+            if (authPopup) {
+              const timer = setInterval(() => {
+                if (authPopup.closed) {
+                  clearInterval(timer);
+                  if (resolved) return;
+                  resolved = true;
+                  window.removeEventListener('message', handleAuthMessage);
+                  // Allow a short delay for any in-flight message, then treat as cancelled.
+                  setTimeout(() => resolve({ success: false }), 500);
+                }
+              }, 500);
             } else {
-              addToast(data.error || 'Google Drive authentication failed.', 'error');
-              resolve(false);
-            }
-          }
-        };
-
-        window.addEventListener('message', handleAuthMessage);
-
-        const authPopup = window.open(authorization_url, 'google-auth-popup', 'width=500,height=600');
-
-        if (authPopup) {
-          const timer = setInterval(() => {
-            if (authPopup.closed) {
-              clearInterval(timer);
               window.removeEventListener('message', handleAuthMessage);
-              // A timeout allows any pending message to be processed before we assume cancellation.
-              setTimeout(() => resolve(false), 500);
+              addToast('Please enable popups for Google Drive authentication.', 'error');
+              resolve({ success: false });
             }
-          }, 500);
-        } else {
-          window.removeEventListener('message', handleAuthMessage);
-          addToast('Please enable popups for Google Drive authentication.', 'error');
-          resolve(false);
+          });
+        } catch (err: any) {
+          addToast(err?.message || 'Could not start Google Drive authentication.', 'error');
+          return { success: false };
         }
-      });
+      };
+
+      let authSuccessful = false;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        const result = await tryAuthorizeOnce();
+        if (result.success) {
+          authSuccessful = true;
+          break;
+        }
+        // If backend reported invalid state, loop to retry (fetching a fresh URL each time).
+        if (!result.invalidState) break; // non-retryable failure
+        // else loop to retry
+      }
 
       if (authSuccessful) {
         // A small delay to allow the browser to refocus on the main window
         // after the popup closes, which can help ensure the Picker opens reliably.
         setTimeout(() => {
-            getAccessToken();
+          getAccessToken();
         }, 300);
       } else {
         // Only show cancelled message if it wasn't a failure from the callback
         const statusAfterAuth = await getGoogleDriveAuthStatus(session.access_token);
         if (!statusAfterAuth.authenticated) {
-             addToast('Google Drive authentication cancelled or failed.', 'info');
+          addToast('Google Drive authentication cancelled or failed.', 'info');
         }
         setIsImporting(false);
       }
