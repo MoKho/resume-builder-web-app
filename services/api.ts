@@ -1,6 +1,10 @@
 import type { ApplicationCreate, ApplicationResponse, JobHistoryResponse, JobHistoryUpdate, ProfileResponse, ResumeUpload, ResumeTextResponse, ResumeCheckRequest, ResumeCheckJobResponse, ResumeCheckResultResponse, GoogleDriveAuthStatus, GoogleDriveAuthorizeUrl, GoogleDriveFileRequest, GoogleDriveFileResponse } from '../types';
 
-export const API_BASE_URL = 'https://api.p-q.app';
+//export const API_BASE_URL = 'https://api.p-q.app';
+//export const API_BASE_URL = 'localhost:8000';
+
+const DEFAULT_API = 'http://localhost:8000';
+export const API_BASE_URL: string = (import.meta?.env?.VITE_API_BASE_URL as string) ?? DEFAULT_API;
 
 async function apiFetch<T,>(path: string, token: string, options: RequestInit = {}): Promise<T> {
   const headers = {

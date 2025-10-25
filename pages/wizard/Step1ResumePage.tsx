@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
@@ -15,7 +15,6 @@ const Step1ResumePage: React.FC = () => {
   const [isFetchingResume, setIsFetchingResume] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   
-  const authCompleted = useRef(false);
   const { session, profile } = useAuth();
   const navigate = useNavigate();
   const { addToast } = useToast();
@@ -31,7 +30,7 @@ const Step1ResumePage: React.FC = () => {
     setIsImporting(true);
     try {
       const response = await openGoogleDriveFile(session.access_token, fileId);
-      setResumeText(response.text);
+      setResumeText(response.content);
       addToast('Resume imported successfully from Google Drive!', 'success');
     } catch (error: any) {
       addToast(error.message || 'Failed to import from Google Drive.', 'error');
@@ -40,7 +39,7 @@ const Step1ResumePage: React.FC = () => {
     }
   };
   
-  const { showPicker, isPickerApiLoaded } = useGooglePicker(handleFileSelected);
+  const { isPickerApiLoaded, getAccessToken } = useGooglePicker(handleFileSelected);
 
   const handleImportFromDrive = useCallback(async () => {
     if (!session) return;
@@ -54,79 +53,111 @@ const Step1ResumePage: React.FC = () => {
       }
 
       const status = await getGoogleDriveAuthStatus(session.access_token);
-      if (status.authenticated && status.access_token) {
-        showPicker(status.access_token);
-        setIsImporting(false);
+      if (status.authenticated) {
+        // Already authorized, get fresh access_token using GIS
+        getAccessToken();
         return;
       }
-      
-      // If not authenticated, start auth flow
-      authCompleted.current = false;
-      const { authorization_url } = await getGoogleDriveAuthorizeUrl(session.access_token);
 
-      const handleAuthMessage = (event: MessageEvent) => {
-        const API_ORIGIN = new URL(API_BASE_URL).origin;
-        if (event.origin !== API_ORIGIN) {
-          return;
-        }
+      // Start auth flow to ensure consent and refresh token are saved server-side.
+      // Always fetch a fresh authorize URL immediately before opening the popup.
+      // If the popup reports an "invalid state" error, automatically retry a
+      // small number of times by fetching a new URL and reopening the popup.
+      const MAX_RETRIES = 2;
 
-        const data = event.data || {};
-        if (data.type === 'google-drive-auth') {
-          window.removeEventListener('message', handleAuthMessage);
-          authCompleted.current = true;
-          
-          if (data.status === 'ok') {
-            addToast('Google Drive connected successfully!', 'success');
-            // Now that we're authed, re-check status and show picker
-            getGoogleDriveAuthStatus(session.access_token)
-              .then(newStatus => {
-                if (newStatus.authenticated && newStatus.access_token) {
-                  showPicker(newStatus.access_token);
+      const tryAuthorizeOnce = async (): Promise<{ success: boolean; invalidState?: boolean }> => {
+        try {
+          const { authorization_url } = await getGoogleDriveAuthorizeUrl(session.access_token);
+
+          return await new Promise((resolve) => {
+            let resolved = false;
+            const API_ORIGIN = new URL(API_BASE_URL).origin;
+
+            const handleAuthMessage = (event: MessageEvent) => {
+              if (event.origin !== API_ORIGIN) return;
+
+              const data = event.data || {};
+              if (data.type === 'google-drive-auth') {
+                // Ensure we only resolve once and clean up.
+                if (resolved) return;
+                resolved = true;
+                window.removeEventListener('message', handleAuthMessage);
+                if (data.status === 'ok') {
+                  addToast('Google Drive connected successfully!', 'success');
+                  resolve({ success: true });
                 } else {
-                  throw new Error("Auth succeeded but token not available.");
+                  // If backend indicates an invalid state (CSRF/state mismatch), indicate for retry.
+                  const err = (data.error || '').toString().toLowerCase();
+                  const isInvalidState = err.includes('invalid state') || err.includes('invalid_state');
+                  if (isInvalidState) {
+                    // Do not show a toast for invalid state here; we'll retry silently.
+                    resolve({ success: false, invalidState: true });
+                  } else {
+                    addToast(data.error || 'Google Drive authentication failed.', 'error');
+                    resolve({ success: false });
+                  }
                 }
-              })
-              .catch(err => {
-                addToast(err.message || "Failed to get token after auth.", 'error');
-              })
-              .finally(() => {
-                setIsImporting(false);
-              });
-          } else {
-            addToast(data.error || 'Google Drive authentication failed.', 'error');
-            setIsImporting(false);
-          }
+              }
+            };
+
+            window.addEventListener('message', handleAuthMessage);
+
+            const authPopup = window.open(authorization_url, 'google-auth-popup', 'width=500,height=600');
+
+            if (authPopup) {
+              const timer = setInterval(() => {
+                if (authPopup.closed) {
+                  clearInterval(timer);
+                  if (resolved) return;
+                  resolved = true;
+                  window.removeEventListener('message', handleAuthMessage);
+                  // Allow a short delay for any in-flight message, then treat as cancelled.
+                  setTimeout(() => resolve({ success: false }), 500);
+                }
+              }, 500);
+            } else {
+              window.removeEventListener('message', handleAuthMessage);
+              addToast('Please enable popups for Google Drive authentication.', 'error');
+              resolve({ success: false });
+            }
+          });
+        } catch (err: any) {
+          addToast(err?.message || 'Could not start Google Drive authentication.', 'error');
+          return { success: false };
         }
       };
 
-      window.addEventListener('message', handleAuthMessage);
+      let authSuccessful = false;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        const result = await tryAuthorizeOnce();
+        if (result.success) {
+          authSuccessful = true;
+          break;
+        }
+        // If backend reported invalid state, loop to retry (fetching a fresh URL each time).
+        if (!result.invalidState) break; // non-retryable failure
+        // else loop to retry
+      }
 
-      const authPopup = window.open(authorization_url, 'google-auth-popup', 'width=500,height=600');
-
-      if (authPopup) {
-        const timer = setInterval(() => {
-          if (authPopup.closed) {
-            clearInterval(timer);
-            window.removeEventListener('message', handleAuthMessage);
-            // Give a brief moment for the message to be processed if auth was successful
-            setTimeout(() => {
-              if (!authCompleted.current) {
-                addToast('Google Drive authentication cancelled.', 'info');
-                setIsImporting(false);
-              }
-            }, 200);
-          }
-        }, 500);
+      if (authSuccessful) {
+        // A small delay to allow the browser to refocus on the main window
+        // after the popup closes, which can help ensure the Picker opens reliably.
+        setTimeout(() => {
+          getAccessToken();
+        }, 300);
       } else {
-        window.removeEventListener('message', handleAuthMessage);
-        addToast('Please enable popups for Google Drive authentication.', 'error');
+        // Only show cancelled message if it wasn't a failure from the callback
+        const statusAfterAuth = await getGoogleDriveAuthStatus(session.access_token);
+        if (!statusAfterAuth.authenticated) {
+          addToast('Google Drive authentication cancelled or failed.', 'info');
+        }
         setIsImporting(false);
       }
     } catch (error: any) {
       addToast(error.message || 'Could not connect to Google Drive.', 'error');
       setIsImporting(false);
     }
-  }, [session, isPickerApiLoaded, addToast, showPicker]);
+  }, [session, isPickerApiLoaded, addToast, getAccessToken]);
   
   useEffect(() => {
     const fetchResume = async () => {
