@@ -1,12 +1,26 @@
-import type { ApplicationCreate, ApplicationResponse, JobHistoryResponse, JobHistoryUpdate, ProfileResponse, ResumeUpload, ResumeTextResponse, ResumeCheckRequest, ResumeCheckJobResponse, ResumeCheckResultResponse, GoogleDriveAuthStatus, GoogleDriveAuthorizeUrl, GoogleDriveFileRequest, GoogleDriveFileResponse } from '../types';
+import type {
+  ApplicationCreate,
+  ApplicationResponse,
+  JobHistoryResponse,
+  JobHistoryUpdate,
+  ProfileResponse,
+  ResumeUpload,
+  ResumeTextResponse,
+  ResumeCheckRequest,
+  ResumeCheckJobResponse,
+  ResumeCheckResultResponse,
+  GoogleDriveAuthStatus,
+  GoogleDriveAuthorizeUrl,
+  GoogleDriveFileRequest,
+  GoogleDriveFileResponse,
+} from '../types';
 
-//export const API_BASE_URL = 'https://api.p-q.app';
-//export const API_BASE_URL = 'localhost:8000';
+// Default to production API; can be overridden by VITE_API_BASE_URL
+const DEFAULT_API = 'https://api.p-q.app';
+const viteApi = typeof import.meta !== 'undefined' ? (import.meta.env as any)?.VITE_API_BASE_URL : undefined;
+export const API_BASE_URL: string = (viteApi && viteApi.length > 0) ? viteApi : DEFAULT_API;
 
-const DEFAULT_API = 'http://localhost:8000';
-export const API_BASE_URL: string = (import.meta?.env?.VITE_API_BASE_URL as string) ?? DEFAULT_API;
-
-async function apiFetch<T,>(path: string, token: string, options: RequestInit = {}): Promise<T> {
+async function apiFetch<T>(path: string, token: string, options: RequestInit = {}): Promise<T> {
   const headers = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`,
@@ -20,8 +34,9 @@ async function apiFetch<T,>(path: string, token: string, options: RequestInit = 
     console.error('API Error:', errorData);
     throw new Error(errorData.detail?.[0]?.msg || errorData.detail || 'API request failed');
   }
+
   if (response.status === 204 || response.headers.get('content-length') === '0') {
-    return null as T;
+    return null as unknown as T;
   }
 
   return response.json();
@@ -39,11 +54,11 @@ export const processResume = (token: string, data: ResumeUpload): Promise<JobHis
 };
 
 export const getResumeText = (token: string): Promise<ResumeTextResponse> => {
-    return apiFetch('/profiles/resume-text', token, { method: 'GET' });
+  return apiFetch('/profiles/resume-text', token, { method: 'GET' });
 };
 
 export const getAllJobHistories = (token: string): Promise<JobHistoryResponse[]> => {
-    return apiFetch('/profiles/job-histories', token, { method: 'GET' });
+  return apiFetch('/profiles/job-histories', token, { method: 'GET' });
 };
 
 export const updateJobHistories = (token: string, updates: JobHistoryUpdate[]): Promise<JobHistoryResponse[]> => {
@@ -61,9 +76,8 @@ export const startResumeCheck = (token: string, data: ResumeCheckRequest): Promi
 };
 
 export const getResumeCheckResult = (token: string, jobId: string): Promise<ResumeCheckResultResponse> => {
-    return apiFetch(`/profiles/check-resume/${jobId}`, token, { method: 'GET' });
+  return apiFetch(`/profiles/check-resume/${jobId}`, token, { method: 'GET' });
 };
-
 
 export const createApplication = (token: string, data: ApplicationCreate): Promise<ApplicationResponse> => {
   return apiFetch('/applications/', token, {
