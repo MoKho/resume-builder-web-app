@@ -146,19 +146,21 @@ const Step2DetailsPage: React.FC = () => {
 
                     {/* Row 2: Achievements and Textarea */}
                     <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Left side: Achievements */}
-                        <div>
-                            {job.achievements_list && job.achievements_list.length > 0 && (
-                                <div className="bg-slate-900/50 p-3 rounded-md border border-slate-700 h-full">
-                                    <h4 className="text-sm font-semibold text-slate-300 mb-2">Key Achievements from Resume:</h4>
-                                    <ul className="list-disc list-inside text-slate-400 text-sm space-y-1 pl-2">
-                                        {job.achievements_list.map((achievement, index) => (
-                                            <li key={index}>{achievement}</li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
-                        </div>
+            {/* Left side: Achievements (read-only textarea preserving line breaks) */}
+            <div>
+              {job.achievements && job.achievements.trim().length > 0 && (
+                <div className="bg-slate-900/50 p-3 rounded-md border border-slate-700 h-full">
+                  <h4 className="text-sm font-semibold text-slate-300 mb-2">Key Achievements from Resume:</h4>
+                  <textarea
+                    value={job.achievements}
+                    readOnly
+                    rows={6}
+                    className="styled-scrollbar w-full h-full min-h-[150px] p-3 bg-slate-900 border border-slate-700 rounded-md text-slate-200 placeholder-slate-500 focus:outline-none"
+                    style={{ whiteSpace: 'pre-wrap' }}
+                  />
+                </div>
+              )}
+            </div>
                         {/* Right side: Textarea */}
                         <div>
                             <textarea

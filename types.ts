@@ -10,7 +10,8 @@ export interface JobHistoryResponse {
   user_id: string;
   company_name: string | null;
   job_title: string | null;
-  achievements_list: string[] | null;
+  // Multi-line text block (verbatim) with line breaks preserved
+  achievements: string;
   detailed_background: string | null;
   is_default_rewrite: boolean | null;
 }
