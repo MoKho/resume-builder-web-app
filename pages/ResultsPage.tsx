@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { getApplication, startResumeCheck, getResumeCheckResult } from '../services/api';
+import { getApplication, startResumeCheck, getResumeCheckResult, API_BASE_URL } from '../services/api';
 import type { ApplicationResponse } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { marked } from 'marked';
@@ -32,6 +32,68 @@ const ResultsPage: React.FC = () => {
   const [isLoadingNewAnalysis, setIsLoadingNewAnalysis] = useState(true);
   const analysisIntervalRef = useRef<number | null>(null);
   const analysisStartedRef = useRef(false); // Ref to track if analysis has been initiated
+
+  // PDF download states
+  const [pdfAvailable, setPdfAvailable] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+  const checkPdfAvailable = async (applicationId: number, token: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/applications/${applicationId}/pdf`, {
+        method: 'HEAD',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res.status === 204;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!session || !application) return;
+    setIsDownloadingPdf(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/applications/${application.id}/pdf`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(`Download failed: ${res.status} ${msg}`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const contentDisposition = res.headers.get('content-disposition') || '';
+      let filename: string | null = null;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename\*?=(?:UTF-8''?)?["']?([^;"']+)["']?/i);
+        if (match) {
+          try { filename = decodeURIComponent(match[1]); } catch { filename = match[1]; }
+        }
+      }
+      if (!filename) {
+        try {
+          const url = new URL(res.url);
+          const last = url.pathname.split('/').pop();
+          if (last) filename = decodeURIComponent(last);
+        } catch (e) {
+          // ignore
+        }
+      }
+      if (filename) a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      addToast('PDF download started.', 'success');
+    } catch (error: any) {
+      addToast(error.message || 'Could not download PDF.', 'error');
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
 
   const parseMarkdown = async (markdown: string | null): Promise<string> => {
     if (!markdown || typeof markdown !== 'string') return '';
@@ -67,6 +129,14 @@ const ResultsPage: React.FC = () => {
       try {
         const appData = await getApplication(session.access_token, applicationId);
         setApplication(appData);
+
+        // If application is completed, check if PDF is available
+        if (appData?.status === 'completed') {
+          const available = await checkPdfAvailable(applicationId, session.access_token);
+          setPdfAvailable(available);
+        } else {
+          setPdfAvailable(false);
+        }
 
         if (appData?.final_resume_text) {
           setTailoredResumeHtml(await parseMarkdown(appData.final_resume_text));
@@ -114,8 +184,34 @@ const ResultsPage: React.FC = () => {
 
     fetchAllData();
     
+    // Poll application status until completed to enable PDF when ready
+    let statusTimer: number | null = null;
+    const pollStatus = async () => {
+      try {
+        const app = await getApplication(session.access_token, applicationId);
+        setApplication(app);
+        if (app.status === 'completed') {
+          const available = await checkPdfAvailable(applicationId, session.access_token);
+          setPdfAvailable(available);
+          if (statusTimer) window.clearTimeout(statusTimer);
+          return;
+        } else if (app.status === 'failed') {
+          setPdfAvailable(false);
+          if (statusTimer) window.clearTimeout(statusTimer);
+          return;
+        } else {
+          setPdfAvailable(false);
+        }
+      } catch (e) {
+        // keep trying silently
+      }
+      statusTimer = window.setTimeout(pollStatus, 2000);
+    };
+    pollStatus();
+    
     return () => {
       if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
+      if (statusTimer) window.clearTimeout(statusTimer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, session]);
@@ -170,6 +266,14 @@ const ResultsPage: React.FC = () => {
             className="flex-1 py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-teal-600 hover:bg-teal-500 transition-colors"
           >
             Copy Resume Text
+          </button>
+          <button
+            onClick={handleDownloadPdf}
+            disabled={!pdfAvailable || isDownloadingPdf}
+            className={`flex-1 py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white transition-colors ${(!pdfAvailable || isDownloadingPdf) ? 'bg-slate-700 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500'}`}
+            title={!pdfAvailable ? 'PDF will be available when processing completes' : ''}
+          >
+            {isDownloadingPdf ? <div className="flex items-center justify-center"><LoadingSpinner size="sm" /></div> : 'Download PDF'}
           </button>
           <button
             onClick={handleStartOver}
