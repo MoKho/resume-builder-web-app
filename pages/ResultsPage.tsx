@@ -33,13 +33,17 @@ const ResultsPage: React.FC = () => {
   const analysisIntervalRef = useRef<number | null>(null);
   const analysisStartedRef = useRef(false); // Ref to track if analysis has been initiated
 
-  // PDF download states
-  const [pdfAvailable, setPdfAvailable] = useState(false);
-  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  // Export (download) states
+  const [exportReady, setExportReady] = useState(false); // readiness based on HEAD /export (using pdf)
+  // Track which download is in progress and who initiated it (to control spinners independently)
+  const [downloadingFormat, setDownloadingFormat] = useState<ExportFormat | null>(null);
+  const [downloadSource, setDownloadSource] = useState<'pdfButton' | 'saveAs' | null>(null);
+  const [isSelectingFormat, setIsSelectingFormat] = useState(false);
 
-  const checkPdfAvailable = async (applicationId: number, token: string): Promise<boolean> => {
+  const checkExportAvailable = async (applicationId: number, token: string): Promise<boolean> => {
     try {
-      const res = await fetch(`${API_BASE_URL}/applications/${applicationId}/pdf`, {
+      // Using pdf for readiness check as per backend guidance
+      const res = await fetch(`${API_BASE_URL}/applications/${applicationId}/export?format=${encodeURIComponent('pdf')}`, {
         method: 'HEAD',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -49,11 +53,27 @@ const ResultsPage: React.FC = () => {
     }
   };
 
-  const handleDownloadPdf = async () => {
+  type ExportFormat = 'pdf' | 'docx' | 'odt' | 'rtf' | 'txt' | 'html' | 'epub' | 'md';
+
+  const EXPORT_FORMATS: { key: ExportFormat; label: string; ext: string }[] = [
+    { key: 'pdf', label: 'PDF (.pdf)', ext: '.pdf' },
+    { key: 'docx', label: 'Word (.docx)', ext: '.docx' },
+    { key: 'odt', label: 'OpenDocument (.odt)', ext: '.odt' },
+    { key: 'rtf', label: 'Rich Text (.rtf)', ext: '.rtf' },
+    { key: 'txt', label: 'Text (.txt)', ext: '.txt' },
+    { key: 'html', label: 'Web Page (.zip)', ext: '.zip' },
+    { key: 'epub', label: 'EPUB (.epub)', ext: '.epub' },
+  { key: 'md', label: 'Markdown (.md)', ext: '.md' },
+  ];
+
+  const handleDownloadExport = async (format: ExportFormat, source: 'pdfButton' | 'saveAs' = 'saveAs') => {
     if (!session || !application) return;
-    setIsDownloadingPdf(true);
+    setIsSelectingFormat(false);
+    setDownloadingFormat(format);
+    setDownloadSource(source);
     try {
-      const res = await fetch(`${API_BASE_URL}/applications/${application.id}/pdf`, {
+      const urlWithParams = `${API_BASE_URL}/applications/${application.id}/export?format=${encodeURIComponent(format)}`;
+      const res = await fetch(urlWithParams, {
         method: 'GET',
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
@@ -65,33 +85,44 @@ const ResultsPage: React.FC = () => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const contentDisposition = res.headers.get('content-disposition') || '';
+
+      // Try to read filename from Content-Disposition if CORS exposes it
+      const contentDisposition = res.headers.get('content-disposition') || res.headers.get('Content-Disposition') || '';
       let filename: string | null = null;
-      if (contentDisposition) {
-        const match = contentDisposition.match(/filename\*?=(?:UTF-8''?)?["']?([^;"']+)["']?/i);
-        if (match) {
-          try { filename = decodeURIComponent(match[1]); } catch { filename = match[1]; }
+
+      const parseContentDispositionFilename = (cd: string): string | null => {
+        if (!cd) return null;
+        // RFC 5987 filename*
+        const starMatch = cd.match(/filename\*=(?:UTF-8''|)([^;]+)/i);
+        if (starMatch && starMatch[1]) {
+          const raw = starMatch[1].trim().replace(/^\"|\"$/g, '');
+          try { return decodeURIComponent(raw); } catch { return raw; }
         }
-      }
+        // Regular filename="..." or filename=...
+        const fnMatch = cd.match(/filename=(?:\"([^\"]+)\"|([^;]+))/i);
+        if (fnMatch) {
+          const raw = (fnMatch[1] || fnMatch[2] || '').trim().replace(/^\"|\"$/g, '');
+          return raw || null;
+        }
+        return null;
+      };
+
+      filename = parseContentDispositionFilename(contentDisposition);
+
       if (!filename) {
-        try {
-          const url = new URL(res.url);
-          const last = url.pathname.split('/').pop();
-          if (last) filename = decodeURIComponent(last);
-        } catch (e) {
-          // ignore
-        }
+        filename = `Tailored Resume - ${application.id}${EXPORT_FORMATS.find(f => f.key === format)?.ext || ''}`;
       }
-      if (filename) a.download = filename;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-      addToast('PDF download started.', 'success');
+      addToast('Download started.', 'success');
     } catch (error: any) {
-      addToast(error.message || 'Could not download PDF.', 'error');
+      addToast(error.message || 'Could not download.', 'error');
     } finally {
-      setIsDownloadingPdf(false);
+      setDownloadingFormat(null);
+      setDownloadSource(null);
     }
   };
 
@@ -130,12 +161,12 @@ const ResultsPage: React.FC = () => {
         const appData = await getApplication(session.access_token, applicationId);
         setApplication(appData);
 
-        // If application is completed, check if PDF is available
+        // If application is completed, check if export is ready (HEAD using pdf)
         if (appData?.status === 'completed') {
-          const available = await checkPdfAvailable(applicationId, session.access_token);
-          setPdfAvailable(available);
+          const available = await checkExportAvailable(applicationId, session.access_token);
+          setExportReady(available);
         } else {
-          setPdfAvailable(false);
+          setExportReady(false);
         }
 
         if (appData?.final_resume_text) {
@@ -184,23 +215,44 @@ const ResultsPage: React.FC = () => {
 
     fetchAllData();
     
-    // Poll application status until completed to enable PDF when ready
+    // Silent HEAD /export readiness probe: try up to 10 times, every 1s
+    let headTimer: number | null = null;
+    let attempts = 0;
+    const tryHead = async () => {
+      if (!session) return;
+      try {
+        const available = await checkExportAvailable(applicationId, session.access_token);
+        if (available) {
+          setExportReady(true);
+          return;
+        }
+      } catch (e) {
+        // ignore
+      }
+      attempts += 1;
+      if (attempts < 10) {
+        headTimer = window.setTimeout(tryHead, 1000);
+      }
+    };
+    tryHead();
+    
+    // Poll application status until completed to enable export when ready
     let statusTimer: number | null = null;
     const pollStatus = async () => {
       try {
         const app = await getApplication(session.access_token, applicationId);
         setApplication(app);
         if (app.status === 'completed') {
-          const available = await checkPdfAvailable(applicationId, session.access_token);
-          setPdfAvailable(available);
+          const available = await checkExportAvailable(applicationId, session.access_token);
+          setExportReady(available);
           if (statusTimer) window.clearTimeout(statusTimer);
           return;
         } else if (app.status === 'failed') {
-          setPdfAvailable(false);
+          setExportReady(false);
           if (statusTimer) window.clearTimeout(statusTimer);
           return;
         } else {
-          setPdfAvailable(false);
+          setExportReady(false);
         }
       } catch (e) {
         // keep trying silently
@@ -212,20 +264,12 @@ const ResultsPage: React.FC = () => {
     return () => {
       if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
       if (statusTimer) window.clearTimeout(statusTimer);
+      if (headTimer) window.clearTimeout(headTimer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, session]);
 
-  const handleCopy = () => {
-    if (application?.final_resume_text) {
-      navigator.clipboard.writeText(application.final_resume_text);
-      addToast('Resume copied to clipboard!', 'success');
-    }
-  };
-
-  const handleStartOver = () => {
-    navigate('/dashboard');
-  };
+  // Note: Copy and Start Over actions removed in favor of Save PDF / Save As / Home
 
   if (isLoading) {
     return (
@@ -251,7 +295,7 @@ const ResultsPage: React.FC = () => {
     <Layout>
       <div className="max-w-4xl mx-auto">
         <h1 className="text-4xl font-bold text-slate-100 mb-2">Your Tailored Resume</h1>
-        <p className="text-lg text-slate-400 mb-6">Here is your AI-powered resume, customized for the job description.</p>
+  {/* Removed redundant intro per UI update */}
 
         <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
           <div
@@ -260,27 +304,43 @@ const ResultsPage: React.FC = () => {
           />
         </div>
 
-        <div className="mt-6 flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
+        <div className="mt-6 flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4 relative">
           <button
-            onClick={handleCopy}
-            className="flex-1 py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-teal-600 hover:bg-teal-500 transition-colors"
+            onClick={() => handleDownloadExport('pdf', 'pdfButton')}
+            disabled={!exportReady || downloadingFormat !== null}
+            className={`flex-1 py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white transition-colors ${(!exportReady || downloadingFormat !== null) ? 'bg-slate-700 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-500'}`}
+            title={!exportReady ? 'Save will be available when processing completes' : ''}
           >
-            Copy Resume Text
+            {(downloadingFormat !== null && downloadSource === 'pdfButton') ? <div className="flex items-center justify-center"><LoadingSpinner size="sm" /></div> : 'Save PDF'}
           </button>
-          <button
-            onClick={handleDownloadPdf}
-            disabled={!pdfAvailable || isDownloadingPdf}
-            className={`flex-1 py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white transition-colors ${(!pdfAvailable || isDownloadingPdf) ? 'bg-slate-700 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500'}`}
-            title={!pdfAvailable ? 'PDF will be available when processing completes' : ''}
-          >
-            {isDownloadingPdf ? <div className="flex items-center justify-center"><LoadingSpinner size="sm" /></div> : 'Download PDF'}
-          </button>
-          <button
-            onClick={handleStartOver}
-            className="flex-1 py-3 px-4 border border-slate-600 text-slate-300 rounded-md hover:bg-slate-700 transition-colors"
-          >
-            Start a New Application
-          </button>
+
+          <div className="flex-1">
+            <button
+              onClick={() => exportReady && setIsSelectingFormat(v => !v)}
+              disabled={!exportReady || downloadingFormat !== null}
+              className={`w-full py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white transition-colors ${(!exportReady || downloadingFormat !== null) ? 'bg-slate-700 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500'}`}
+              title={!exportReady ? 'Save As will be available when processing completes' : ''}
+            >
+              {(downloadingFormat !== null && downloadSource === 'saveAs') ? <div className="flex items-center justify-center"><LoadingSpinner size="sm" /></div> : 'Save As...'}
+            </button>
+
+            {isSelectingFormat && (
+              <div className="absolute z-20 mt-2 w-full sm:w-auto bg-slate-800 border border-slate-700 rounded-md shadow-lg p-2 sm:min-w-[16rem]">
+                <p className="text-slate-300 text-sm px-2 py-1">Choose a format</p>
+                <div className="grid grid-cols-1 gap-1 mt-1">
+                  {EXPORT_FORMATS.map(fmt => (
+                    <button
+                      key={fmt.key}
+                      onClick={() => handleDownloadExport(fmt.key, 'saveAs')}
+                      className="text-left px-3 py-2 rounded hover:bg-slate-700 text-slate-200"
+                    >
+                      {fmt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="mt-12 border-t border-slate-700 pt-8">
