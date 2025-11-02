@@ -7,13 +7,32 @@ import Logo from '../../components/Logo';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import GoogleDriveIcon from '../../components/GoogleDriveIcon';
 import { useGooglePicker } from '../../hooks/useGooglePicker';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
 const Step1ResumePage: React.FC = () => {
+  // Minimal markdown styles to ensure readable headings and list bullets
+  const MARKDOWN_PREVIEW_STYLES = `
+    .md-preview h1 { font-size: 1.5rem; font-weight: 700; margin: 0.75rem 0; }
+    .md-preview h2 { font-size: 1.25rem; font-weight: 700; margin: 0.75rem 0; }
+    .md-preview h3 { font-size: 1.125rem; font-weight: 700; margin: 0.75rem 0; }
+    .md-preview p { margin: 0.5rem 0; }
+    .md-preview ul { list-style: disc; padding-left: 1.25rem; margin: 0.5rem 0; }
+    .md-preview ol { list-style: decimal; padding-left: 1.25rem; margin: 0.5rem 0; }
+    .md-preview li { margin: 0.25rem 0; }
+    .md-preview strong { font-weight: 700; }
+    .md-preview em { font-style: italic; }
+    .md-preview code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 0.875rem; }
+  `;
   const [resumeText, setResumeText] = useState('');
   const [originalResumeText, setOriginalResumeText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingResume, setIsFetchingResume] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [importedFromDrive, setImportedFromDrive] = useState(false);
+  const [importedMarkdown, setImportedMarkdown] = useState<string | null>(null);
+  const [importedHtml, setImportedHtml] = useState<string | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
   
   const { session, profile } = useAuth();
   const navigate = useNavigate();
@@ -30,7 +49,16 @@ const Step1ResumePage: React.FC = () => {
     setIsImporting(true);
     try {
       const response = await openGoogleDriveFile(session.access_token, fileId);
-      setResumeText(response.content);
+      // Always use raw text content for processing later
+      setResumeText(response.content || '');
+      // Prefer markdown for display if available; otherwise fall back to raw text
+      const md = (response.content_md || '').trim();
+      if (md) {
+        setImportedMarkdown(md);
+      } else {
+        setImportedMarkdown(null);
+      }
+      setImportedFromDrive(true);
       addToast('Resume imported successfully from Google Drive!', 'success');
     } catch (error: any) {
       addToast(error.message || 'Failed to import from Google Drive.', 'error');
@@ -214,16 +242,39 @@ const Step1ResumePage: React.FC = () => {
     }
   };
 
+  // Rendered HTML for markdown preview when imported from Drive (handles async parse)
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!importedMarkdown) {
+        setImportedHtml(null);
+        return;
+      }
+      try {
+        const parsed = await marked.parse(importedMarkdown as string);
+        const safe = DOMPurify.sanitize(parsed as string);
+        if (!cancelled) setImportedHtml(safe);
+      } catch {
+        if (!cancelled) setImportedHtml(null);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [importedMarkdown]);
+
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
+      <style>{MARKDOWN_PREVIEW_STYLES}</style>
       <div className="w-full max-w-3xl">
         <div className="text-center mb-8">
           <Logo />
           <h1 className="text-3xl font-bold mt-4">Setup Your Profile</h1>
           <p className="text-slate-400 mt-2">Step 1 of 2: Provide Your Master Resume</p>
         </div>
-        
+        {/* Actions */}
         <div className="flex justify-end mb-6 space-x-4">
           <button
             onClick={handleCancel}
@@ -240,39 +291,95 @@ const Step1ResumePage: React.FC = () => {
             {isLoading ? <LoadingSpinner size="sm" /> : 'Next'}
           </button>
         </div>
-
-        <div className="bg-slate-800 p-8 rounded-lg shadow-lg relative">
-           {isFetchingResume && (
+        {/* Primary: Import from Google Drive */}
+        <div className="bg-slate-800 p-6 md:p-8 rounded-lg shadow-lg mb-6 relative">
+          {isFetchingResume && (
             <div className="absolute inset-0 bg-slate-800/70 flex justify-center items-center rounded-lg z-10">
               <LoadingSpinner size="md" />
             </div>
           )}
 
-          <div className="flex justify-between items-center mb-4">
-            <p className="text-slate-400">Paste your resume or import from a Google Doc.</p>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+            <div>
+              <h2 className="text-xl font-semibold">Import from Google Drive</h2>
+              <p className="text-slate-400 mt-1">Recommended: Fast, accurate formatting, and fewer copy/paste errors.</p>
+            </div>
             <button
-                onClick={handleImportFromDrive}
-                disabled={isLoading || isFetchingResume || isImporting}
-                className="flex-shrink-0 flex items-center justify-center px-4 py-2 border border-slate-600 text-slate-300 rounded-md hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              onClick={handleImportFromDrive}
+              disabled={isLoading || isFetchingResume || isImporting}
+              className="flex-shrink-0 inline-flex items-center justify-center px-5 py-2.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow"
             >
-                {isImporting ? 
-                  <LoadingSpinner size="sm"/> : 
-                  <><GoogleDriveIcon className="w-5 h-5 mr-2" /> Import from Drive</>
-                }
+              {isImporting ? (
+                <LoadingSpinner size="sm" />
+              ) : (
+                <>
+                  <GoogleDriveIcon className="w-5 h-5 mr-2" /> Connect Google Drive
+                </>
+              )}
             </button>
           </div>
 
-          <textarea
-            value={resumeText}
-            onChange={(e) => setResumeText(e.target.value)}
-            placeholder={
-                isFetchingResume 
-                ? "Loading your resume..." 
-                : "Paste your full resume here..."
-            }
-            className="styled-scrollbar w-full h-96 p-4 bg-slate-900 border border-slate-700 rounded-md text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
-            disabled={isLoading || isFetchingResume}
-          />
+          {/* Preview when imported */}
+          {importedFromDrive && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-medium">Imported Preview</h3>
+                <span className="text-xs text-slate-400">Editing is disabled for Google imports</span>
+              </div>
+              {importedHtml ? (
+                <div
+                  className="styled-scrollbar md-preview max-w-none bg-slate-900 border border-slate-700 rounded-md p-4"
+                  dangerouslySetInnerHTML={{ __html: importedHtml }}
+                />
+              ) : (
+                <textarea
+                  value={resumeText}
+                  readOnly
+                  className="styled-scrollbar w-full h-64 p-4 bg-slate-900 border border-slate-700 rounded-md text-slate-200"
+                />
+              )}
+              <p className="text-xs text-slate-400 mt-2">
+                We’ll use the plain text content for processing, preserving your original formatting when possible.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Secondary: Manual paste (collapsed by default) */}
+        <div className="bg-slate-800 p-0 rounded-lg shadow-lg overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setManualOpen((v) => !v)}
+            className="w-full text-left px-6 py-4 flex items-center justify-between hover:bg-slate-750/50 transition-colors"
+          >
+            <div>
+              <h2 className="text-lg font-semibold">Or paste your resume manually</h2>
+              <p className="text-slate-400 mt-1">If you don’t use Google Drive, paste the full text below.</p>
+            </div>
+            <span className="ml-4 text-slate-400 text-sm">
+              {manualOpen ? 'Hide' : 'Show'}
+            </span>
+          </button>
+          {manualOpen && (
+            <div className="px-6 pb-6">
+              <textarea
+                value={resumeText}
+                onChange={(e) => setResumeText(e.target.value)}
+                placeholder={
+                  isFetchingResume
+                    ? 'Loading your resume...'
+                    : 'Paste your full resume here...'
+                }
+                className="styled-scrollbar w-full h-80 p-4 bg-slate-900 border border-slate-700 rounded-md text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                disabled={isLoading || isFetchingResume || importedFromDrive}
+              />
+              {importedFromDrive && (
+                <p className="text-xs text-amber-400 mt-2">
+                  Imported from Google Drive — manual editing is disabled. To edit, clear the import by reloading the page.
+                </p>
+              )}
+            </div>
+          )}
         </div>
         
       </div>

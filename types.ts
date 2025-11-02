@@ -77,4 +77,6 @@ export interface GoogleDriveFileRequest {
 export interface GoogleDriveFileResponse {
   content: string;
   fileId: string;
+  // Optional Markdown representation of the resume content for rich preview
+  content_md?: string | null;
 }
