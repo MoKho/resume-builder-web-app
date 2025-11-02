@@ -21,7 +21,6 @@ const ResultsPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   const [tailoredResumeHtml, setTailoredResumeHtml] = useState('');
-  const [initialAnalysisHtml, setInitialAnalysisHtml] = useState('');
   const [newAnalysisHtml, setNewAnalysisHtml] = useState('');
   
   const [initialScore, setInitialScore] = useState<number | null>(null);
@@ -32,6 +31,7 @@ const ResultsPage: React.FC = () => {
   const [isLoadingNewAnalysis, setIsLoadingNewAnalysis] = useState(true);
   const analysisIntervalRef = useRef<number | null>(null);
   const analysisStartedRef = useRef(false); // Ref to track if analysis has been initiated
+  const saveAsContainerRef = useRef<HTMLDivElement | null>(null); // For closing menu on outside click
 
   // Export (download) states
   const [exportReady, setExportReady] = useState(false); // readiness based on HEAD /export (using pdf)
@@ -147,10 +147,7 @@ const ResultsPage: React.FC = () => {
     };
 
     const processInitialData = async () => {
-      const { initialAnalysis, initialScore, initialRawScoreCsv } = location.state || {};
-      if (initialAnalysis) {
-        setInitialAnalysisHtml(await parseMarkdown(initialAnalysis));
-      }
+      const { initialScore, initialRawScoreCsv } = location.state || {};
       setInitialScore(initialScore ?? null);
       setInitialRawScoreCsv(initialRawScoreCsv ?? null);
     };
@@ -269,6 +266,23 @@ const ResultsPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, session]);
 
+  // Close the "Save As" menu when clicking outside of it
+  useEffect(() => {
+    if (!isSelectingFormat) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const container = saveAsContainerRef.current;
+      if (container && !container.contains(e.target as Node)) {
+        setIsSelectingFormat(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isSelectingFormat]);
+
   // Note: Copy and Start Over actions removed in favor of Save PDF / Save As / Home
 
   if (isLoading) {
@@ -314,7 +328,7 @@ const ResultsPage: React.FC = () => {
             {(downloadingFormat !== null && downloadSource === 'pdfButton') ? <div className="flex items-center justify-center"><LoadingSpinner size="sm" /></div> : 'Save PDF'}
           </button>
 
-          <div className="flex-1">
+          <div className="flex-1" ref={saveAsContainerRef}>
             <button
               onClick={() => exportReady && setIsSelectingFormat(v => !v)}
               disabled={!exportReady || downloadingFormat !== null}
