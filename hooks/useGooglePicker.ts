@@ -93,7 +93,10 @@ export const useGooglePicker = (onFileSelect: PickerCallback) => {
     }
 
     const docsView = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
-        .setMimeTypes('application/vnd.google-apps.document'); // Only Google Docs
+        // Allow Google Docs, PDF, DOCX and legacy DOC files
+        .setMimeTypes(
+          'application/vnd.google-apps.document,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword'
+        );
         
     const picker = new window.google.picker.PickerBuilder()
       .setOAuthToken(oauthToken)
