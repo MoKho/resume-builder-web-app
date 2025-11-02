@@ -118,6 +118,12 @@ const ResultsPage: React.FC = () => {
       a.remove();
       window.URL.revokeObjectURL(url);
       addToast('Download started.', 'success');
+      // Notify other parts of the app that a resume download occurred
+      try {
+        window.dispatchEvent(new CustomEvent('resume:downloaded', { detail: { format } }));
+      } catch (e) {
+        // ignore
+      }
     } catch (error: any) {
       addToast(error.message || 'Could not download.', 'error');
     } finally {
