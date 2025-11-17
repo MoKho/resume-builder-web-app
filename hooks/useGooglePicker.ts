@@ -9,6 +9,14 @@ const _env = (import.meta as any).env || {};
 const GOOGLE_API_KEY = _env.VITE_GOOGLE_DEVELOPER_KEY || _env.REACT_APP_GOOGLE_DEVELOPER_KEY;
 const GOOGLE_CLIENT_ID = _env.VITE_GOOGLE_CLIENT_ID || _env.REACT_APP_GOOGLE_CLIENT_ID;
 
+// Picker should surface Google Docs plus common resume upload formats
+const ALLOWED_MIME_TYPES = [
+  'application/vnd.google-apps.document',
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+];
+
 // Fail fast if credentials are missing
 if (!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) {
   throw new Error(
@@ -92,11 +100,9 @@ export const useGooglePicker = (onFileSelect: PickerCallback) => {
       return;
     }
 
-    const docsView = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
+    const docsView = new window.google.picker.DocsView(window.google.picker.ViewId.DOCUMENTS)
         // Allow Google Docs, PDF, DOCX and legacy DOC files
-        .setMimeTypes(
-          'application/vnd.google-apps.document,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword'
-        );
+        .setMimeTypes(ALLOWED_MIME_TYPES.join(','));
         
     const picker = new window.google.picker.PickerBuilder()
       .setOAuthToken(oauthToken)
