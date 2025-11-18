@@ -13,6 +13,7 @@ import type {
   GoogleDriveAuthorizeUrl,
   GoogleDriveFileRequest,
   GoogleDriveFileResponse,
+  UploadResumeResponse,
 } from '../types';
 
 // Default to production API; can be overridden by VITE_API_BASE_URL
@@ -105,4 +106,29 @@ export const openGoogleDriveFile = (token: string, fileId: string): Promise<Goog
     method: 'POST',
     body: JSON.stringify(data),
   });
+};
+
+// Upload resume file from local device (multipart/form-data)
+export const uploadResumeFile = async (token: string, file: File): Promise<UploadResumeResponse> => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${API_BASE_URL}/profiles/upload-resume`, {
+    method: 'POST',
+    headers: {
+      // Do NOT set Content-Type; browser will set the multipart boundary
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'An unknown error occurred' }));
+    console.error('API Error:', errorData);
+    throw new Error(
+      (errorData as any).detail?.[0]?.msg || (errorData as any).detail || (errorData as any).message || 'File upload failed'
+    );
+  }
+
+  return response.json();
 };

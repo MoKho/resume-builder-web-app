@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
-import { processResume, getResumeText, getGoogleDriveAuthStatus, getGoogleDriveAuthorizeUrl, openGoogleDriveFile, API_BASE_URL } from '../../services/api';
+import { processResume, getResumeText, getGoogleDriveAuthStatus, getGoogleDriveAuthorizeUrl, openGoogleDriveFile, uploadResumeFile, API_BASE_URL } from '../../services/api';
 import Logo from '../../components/Logo';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import GoogleDriveIcon from '../../components/GoogleDriveIcon';
@@ -30,9 +30,11 @@ const Step1ResumePage: React.FC = () => {
   const [isFetchingResume, setIsFetchingResume] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importedFromDrive, setImportedFromDrive] = useState(false);
+  const [importedFromUpload, setImportedFromUpload] = useState(false);
   const [importedMarkdown, setImportedMarkdown] = useState<string | null>(null);
   const [importedHtml, setImportedHtml] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   
   const { session, profile } = useAuth();
   const navigate = useNavigate();
@@ -68,6 +70,39 @@ const Step1ResumePage: React.FC = () => {
   };
   
   const { isPickerApiLoaded, getAccessToken } = useGooglePicker(handleFileSelected);
+
+  const handleLocalFileClick = () => {
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    fileInputRef.current?.click();
+  };
+
+  const handleLocalFileChange: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!session) return;
+
+    const allowed = ['pdf', 'doc', 'docx', 'txt', 'md'];
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (!ext || !allowed.includes(ext)) {
+      addToast('Unsupported file type. Please upload pdf, doc, docx, txt, or md.', 'error');
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const res = await uploadResumeFile(session.access_token, file);
+      setResumeText(res.content || '');
+      const md = (res.content_md || '').trim();
+      setImportedMarkdown(md ? md : null);
+      setImportedFromUpload(true);
+      setImportedFromDrive(false);
+      addToast('Resume uploaded successfully!', 'success');
+    } catch (error: any) {
+      addToast(error.message || 'Failed to upload resume file.', 'error');
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   const handleImportFromDrive = useCallback(async () => {
     if (!session) return;
@@ -319,12 +354,36 @@ const Step1ResumePage: React.FC = () => {
             </button>
           </div>
 
+          {/* Upload from device */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold">Upload from your device</h2>
+              <p className="text-slate-400 mt-1">PDF, DOC, DOCX, MD, or TXT supported.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+                onChange={handleLocalFileChange}
+                className="hidden"
+              />
+              <button
+                onClick={handleLocalFileClick}
+                disabled={isLoading || isFetchingResume || isImporting}
+                className="flex-shrink-0 inline-flex items-center justify-center px-5 py-2.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow"
+              >
+                {isImporting ? <LoadingSpinner size="sm" /> : 'Upload Resume File'}
+              </button>
+            </div>
+          </div>
+
           {/* Preview when imported */}
-          {importedFromDrive && (
+          {(importedFromDrive || importedFromUpload) && (
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="font-medium">Imported Preview</h3>
-                <span className="text-xs text-slate-400">Editing is disabled for Google imports</span>
+                <span className="text-xs text-slate-400">Editing is disabled for imported resumes</span>
               </div>
               {importedHtml ? (
                 <div
@@ -371,11 +430,11 @@ const Step1ResumePage: React.FC = () => {
                     : 'Paste your full resume here...'
                 }
                 className="styled-scrollbar w-full h-80 p-4 bg-slate-900 border border-slate-700 rounded-md text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                disabled={isLoading || isFetchingResume || importedFromDrive}
+                disabled={isLoading || isFetchingResume || importedFromDrive || importedFromUpload}
               />
-              {importedFromDrive && (
+              {(importedFromDrive || importedFromUpload) && (
                 <p className="text-xs text-amber-400 mt-2">
-                  Imported from Google Drive — manual editing is disabled. To edit, clear the import by reloading the page.
+                  Imported from file/Drive — manual editing is disabled. To edit, clear the import by reloading the page.
                 </p>
               )}
             </div>

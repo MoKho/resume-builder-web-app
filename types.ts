@@ -80,3 +80,16 @@ export interface GoogleDriveFileResponse {
   // Optional Markdown representation of the resume content for rich preview
   content_md?: string | null;
 }
+
+// Upload Resume (device) Types
+export interface UploadedDestination {
+  fileId: string;
+  mimeType?: string;
+  name?: string;
+}
+
+export interface UploadResumeResponse {
+  destination: UploadedDestination;
+  content: string;
+  content_md: string;
+}
