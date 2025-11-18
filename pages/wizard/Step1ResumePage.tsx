@@ -10,99 +10,17 @@ import { useGooglePicker } from '../../hooks/useGooglePicker';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
-const Step1ResumePage: React.FC = () => {
-  // Minimal markdown styles to ensure readable headings and list bullets
-  const MARKDOWN_PREVIEW_STYLES = `
-    .md-preview h1 { font-size: 1.5rem; font-weight: 700; margin: 0.75rem 0; }
-    .md-preview h2 { font-size: 1.25rem; font-weight: 700; margin: 0.75rem 0; }
-    .md-preview h3 { font-size: 1.125rem; font-weight: 700; margin: 0.75rem 0; }
-    .md-preview p { margin: 0.5rem 0; }
-    .md-preview ul { list-style: disc; padding-left: 1.25rem; margin: 0.5rem 0; }
-    .md-preview ol { list-style: decimal; padding-left: 1.25rem; margin: 0.5rem 0; }
-    .md-preview li { margin: 0.25rem 0; }
-    .md-preview strong { font-weight: 700; }
-    .md-preview em { font-style: italic; }
-    .md-preview code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 0.875rem; }
-  `;
-  const [resumeText, setResumeText] = useState('');
-  const [originalResumeText, setOriginalResumeText] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isFetchingResume, setIsFetchingResume] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const [importedFromDrive, setImportedFromDrive] = useState(false);
-  const [importedFromUpload, setImportedFromUpload] = useState(false);
-  const [importedMarkdown, setImportedMarkdown] = useState<string | null>(null);
-  const [importedHtml, setImportedHtml] = useState<string | null>(null);
-  const [manualOpen, setManualOpen] = useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
-  
-  const { session, profile } = useAuth();
-  const navigate = useNavigate();
-  const { addToast } = useToast();
-  
-  const handleFileSelected = async (fileId: string | null) => {
-    if (!fileId) {
-      addToast('Import cancelled.', 'info');
-      setIsImporting(false);
-      return;
-    }
-    if (!session) return;
-
-    setIsImporting(true);
-    try {
-      const response = await openGoogleDriveFile(session.access_token, fileId);
-      // Always use raw text content for processing later
-      setResumeText(response.content || '');
-      // Prefer markdown for display if available; otherwise fall back to raw text
-      const md = (response.content_md || '').trim();
-      if (md) {
-        setImportedMarkdown(md);
-      } else {
-        setImportedMarkdown(null);
-      }
-      setImportedFromDrive(true);
-      addToast('Resume imported successfully from Google Drive!', 'success');
-    } catch (error: any) {
-      addToast(error.message || 'Failed to import from Google Drive.', 'error');
-    } finally {
-      setIsImporting(false);
-    }
-  };
-  
-  const { isPickerApiLoaded, getAccessToken } = useGooglePicker(handleFileSelected);
-
-  const handleLocalFileClick = () => {
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    fileInputRef.current?.click();
-  };
-
-  const handleLocalFileChange: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!session) return;
-
-    const allowed = ['pdf', 'doc', 'docx', 'txt', 'md'];
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    if (!ext || !allowed.includes(ext)) {
-      addToast('Unsupported file type. Please upload pdf, doc, docx, txt, or md.', 'error');
-      return;
-    }
-
-    setIsImporting(true);
-    try {
-      const res = await uploadResumeFile(session.access_token, file);
-      setResumeText(res.content || '');
-      const md = (res.content_md || '').trim();
-      setImportedMarkdown(md ? md : null);
-      setImportedFromUpload(true);
-      setImportedFromDrive(false);
-      addToast('Resume uploaded successfully!', 'success');
-    } catch (error: any) {
-      addToast(error.message || 'Failed to upload resume file.', 'error');
-    } finally {
-      setIsImporting(false);
-    }
-  };
+// Isolated section that initializes Google Picker only when rendered
+const GoogleDriveImportSection: React.FC<{
+  session: any;
+  addToast: (msg: string, type: 'success' | 'error' | 'info') => void;
+  isLoading: boolean;
+  isFetchingResume: boolean;
+  isImporting: boolean;
+  setIsImporting: React.Dispatch<React.SetStateAction<boolean>>;
+  onFileSelected: (fileId: string | null) => void | Promise<void>;
+}> = ({ session, addToast, isLoading, isFetchingResume, isImporting, setIsImporting, onFileSelected }) => {
+  const { isPickerApiLoaded, getAccessToken } = useGooglePicker(onFileSelected);
 
   const handleImportFromDrive = useCallback(async () => {
     if (!session) return;
@@ -220,7 +138,137 @@ const Step1ResumePage: React.FC = () => {
       addToast(error.message || 'Could not connect to Google Drive.', 'error');
       setIsImporting(false);
     }
-  }, [session, isPickerApiLoaded, addToast, getAccessToken]);
+  }, [session, isPickerApiLoaded, addToast, getAccessToken, setIsImporting]);
+
+  return (
+    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h2 className="text-xl font-semibold">Import from Google Drive</h2>
+        <p className="text-slate-400 mt-1">Recommended: Fast, accurate formatting, and fewer copy/paste errors.</p>
+      </div>
+      <button
+        onClick={handleImportFromDrive}
+        disabled={isLoading || isFetchingResume || isImporting}
+        className="flex-shrink-0 inline-flex items-center justify-center px-5 py-2.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow"
+      >
+        {isImporting ? (
+          <LoadingSpinner size="sm" />
+        ) : (
+          <>
+            <GoogleDriveIcon className="w-5 h-5 mr-2" /> Connect Google Drive
+          </>
+        )}
+      </button>
+    </div>
+  );
+};
+
+const Step1ResumePage: React.FC = () => {
+  // Feature flag (Vite): controls visibility of Google Drive import
+  const enableGoogleImport: boolean = (() => {
+    try {
+      const raw = (import.meta as any)?.env?.VITE_ENABLE_GOOGLE_IMPORT;
+      if (raw === undefined || raw === null || raw === '') return false; // default Off
+      return ['1', 'true', 'yes', 'on'].includes(String(raw).toLowerCase());
+    } catch {
+      return true;
+    }
+  })();
+
+  // Minimal markdown styles to ensure readable headings and list bullets
+  const MARKDOWN_PREVIEW_STYLES = `
+    .md-preview h1 { font-size: 1.5rem; font-weight: 700; margin: 0.75rem 0; }
+    .md-preview h2 { font-size: 1.25rem; font-weight: 700; margin: 0.75rem 0; }
+    .md-preview h3 { font-size: 1.125rem; font-weight: 700; margin: 0.75rem 0; }
+    .md-preview p { margin: 0.5rem 0; }
+    .md-preview ul { list-style: disc; padding-left: 1.25rem; margin: 0.5rem 0; }
+    .md-preview ol { list-style: decimal; padding-left: 1.25rem; margin: 0.5rem 0; }
+    .md-preview li { margin: 0.25rem 0; }
+    .md-preview strong { font-weight: 700; }
+    .md-preview em { font-style: italic; }
+    .md-preview code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 0.875rem; }
+  `;
+  const [resumeText, setResumeText] = useState('');
+  const [originalResumeText, setOriginalResumeText] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isFetchingResume, setIsFetchingResume] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importedFromDrive, setImportedFromDrive] = useState(false);
+  const [importedFromUpload, setImportedFromUpload] = useState(false);
+  const [importedMarkdown, setImportedMarkdown] = useState<string | null>(null);
+  const [importedHtml, setImportedHtml] = useState<string | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  
+  const { session, profile } = useAuth();
+  const navigate = useNavigate();
+  const { addToast } = useToast();
+  
+  const handleFileSelected = async (fileId: string | null) => {
+    if (!fileId) {
+      addToast('Import cancelled.', 'info');
+      setIsImporting(false);
+      return;
+    }
+    if (!session) return;
+
+    setIsImporting(true);
+    try {
+      const response = await openGoogleDriveFile(session.access_token, fileId);
+      // Always use raw text content for processing later
+      setResumeText(response.content || '');
+      // Prefer markdown for display if available; otherwise fall back to raw text
+      const md = (response.content_md || '').trim();
+      if (md) {
+        setImportedMarkdown(md);
+      } else {
+        setImportedMarkdown(null);
+      }
+      setImportedFromDrive(true);
+      addToast('Resume imported successfully from Google Drive!', 'success');
+    } catch (error: any) {
+      addToast(error.message || 'Failed to import from Google Drive.', 'error');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+  
+  // Google Picker is initialized only when feature flag is ON via child component
+
+  const handleLocalFileClick = () => {
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    fileInputRef.current?.click();
+  };
+
+  const handleLocalFileChange: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!session) return;
+
+    const allowed = ['pdf', 'doc', 'docx', 'txt', 'md'];
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (!ext || !allowed.includes(ext)) {
+      addToast('Unsupported file type. Please upload pdf, doc, docx, txt, or md.', 'error');
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const res = await uploadResumeFile(session.access_token, file);
+      setResumeText(res.content || '');
+      const md = (res.content_md || '').trim();
+      setImportedMarkdown(md ? md : null);
+      setImportedFromUpload(true);
+      setImportedFromDrive(false);
+      addToast('Resume uploaded successfully!', 'success');
+    } catch (error: any) {
+      addToast(error.message || 'Failed to upload resume file.', 'error');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  // (Removed) Google Drive import handler moved into child component to avoid initializing Picker when flag is off.
   
   useEffect(() => {
     const fetchResume = async () => {
@@ -326,7 +374,7 @@ const Step1ResumePage: React.FC = () => {
             {isLoading ? <LoadingSpinner size="sm" /> : 'Next'}
           </button>
         </div>
-        {/* Primary: Import from Google Drive */}
+        {/* Primary: Upload or Import */}
         <div className="bg-slate-800 p-6 md:p-8 rounded-lg shadow-lg mb-6 relative">
           {isFetchingResume && (
             <div className="absolute inset-0 bg-slate-800/70 flex justify-center items-center rounded-lg z-10">
@@ -334,28 +382,8 @@ const Step1ResumePage: React.FC = () => {
             </div>
           )}
 
+          {/* Upload from device (moved to top) */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-            <div>
-              <h2 className="text-xl font-semibold">Import from Google Drive</h2>
-              <p className="text-slate-400 mt-1">Recommended: Fast, accurate formatting, and fewer copy/paste errors.</p>
-            </div>
-            <button
-              onClick={handleImportFromDrive}
-              disabled={isLoading || isFetchingResume || isImporting}
-              className="flex-shrink-0 inline-flex items-center justify-center px-5 py-2.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow"
-            >
-              {isImporting ? (
-                <LoadingSpinner size="sm" />
-              ) : (
-                <>
-                  <GoogleDriveIcon className="w-5 h-5 mr-2" /> Connect Google Drive
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Upload from device */}
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h2 className="text-xl font-semibold">Upload from your device</h2>
               <p className="text-slate-400 mt-1">PDF, DOC, DOCX, MD, or TXT supported.</p>
@@ -377,6 +405,19 @@ const Step1ResumePage: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* Import from Google Drive (feature-flagged, avoids hook init when off) */}
+          {enableGoogleImport && (
+            <GoogleDriveImportSection
+              session={session}
+              addToast={addToast}
+              isLoading={isLoading}
+              isFetchingResume={isFetchingResume}
+              isImporting={isImporting}
+              setIsImporting={setIsImporting}
+              onFileSelected={handleFileSelected}
+            />
+          )}
 
           {/* Preview when imported */}
           {(importedFromDrive || importedFromUpload) && (
