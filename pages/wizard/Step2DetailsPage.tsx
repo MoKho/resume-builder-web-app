@@ -7,6 +7,12 @@ import { updateJobHistories, getAllJobHistories } from '../../services/api';
 import Logo from '../../components/Logo';
 import LoadingSpinner from '../../components/LoadingSpinner';
 
+const parseAchievementLines = (achievements?: string | null) =>
+  (achievements || '')
+    .split(/\r?\n+/)
+    .map(line => line.replace(/^[-•\u2022]+\s*/, '').trim())
+    .filter(Boolean);
+
 const Step2DetailsPage: React.FC = () => {
   const navigate = useNavigate();
   const { session } = useAuth();
@@ -20,11 +26,21 @@ const Step2DetailsPage: React.FC = () => {
   useEffect(() => {
     if (!session) return;
 
+    const applyDefaultSelections = (histories: JobHistoryResponse[]) => {
+      if (histories.length <= 2) return histories;
+      const alreadySelected = histories.filter(job => !!job.is_default_rewrite).length;
+      if (alreadySelected > 0) return histories;
+      return histories.map((job, index) =>
+        index < 2 ? { ...job, is_default_rewrite: true } : job
+      );
+    };
+
     const fetchJobHistories = async () => {
       setIsFetching(true);
       try {
         const data = await getAllJobHistories(session.access_token);
-        setJobHistories(data);
+        const withDefaults = applyDefaultSelections(data);
+        setJobHistories(withDefaults);
         setOriginalJobHistories(JSON.parse(JSON.stringify(data))); // Deep copy for comparison
       } catch (error: any) {
         addToast(error.message || 'Failed to fetch job history.', 'error');
@@ -124,8 +140,10 @@ const Step2DetailsPage: React.FC = () => {
         </div>
 
         <div className="space-y-6">
-            {jobHistories.map(job => (
-                <div key={job.id} className="bg-slate-800 p-6 rounded-lg shadow-lg">
+          {jobHistories.map(job => {
+            const achievementLines = parseAchievementLines(job.achievements);
+            return (
+            <div key={job.id} className="bg-slate-800 p-6 rounded-lg shadow-lg">
                     {/* Row 1: Title, Company, and Checkbox */}
                     <div className="flex flex-col md:flex-row justify-between md:items-start gap-4">
                         <div>
@@ -148,32 +166,35 @@ const Step2DetailsPage: React.FC = () => {
                     <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Left side: Achievements (read-only textarea preserving line breaks) */}
             <div>
-              {job.achievements && job.achievements.trim().length > 0 && (
-                <div className="bg-slate-900/50 p-3 rounded-md border border-slate-700 h-full">
-                  <h4 className="text-sm font-semibold text-slate-300 mb-2">Key Achievements from Resume:</h4>
-                  <textarea
-                    value={job.achievements}
-                    readOnly
-                    rows={6}
-                    className="styled-scrollbar w-full h-full min-h-[150px] p-3 bg-slate-900 border border-slate-700 rounded-md text-slate-200 placeholder-slate-500 focus:outline-none"
-                    style={{ whiteSpace: 'pre-wrap' }}
-                  />
-                </div>
-              )}
+                  <div className="bg-slate-900/50 p-3 rounded-md border border-slate-700 h-full flex flex-col">
+                <h4 className="text-sm font-semibold text-slate-300 mb-2">Key Achievements from Resume:</h4>
+                <div className="styled-scrollbar flex-1 overflow-auto pr-1">
+                      {achievementLines.length > 0 ? (
+                        <ul className="list-disc list-inside space-y-1 text-slate-200 text-sm leading-relaxed">
+                          {achievementLines.map((line, idx) => (
+                            <li key={`${job.id}-achievement-${idx}`}>{line}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-slate-500">No achievements captured for this role.</p>
+                      )}
+                    </div>
+                  </div>
             </div>
                         {/* Right side: Textarea */}
                         <div>
                             <textarea
                                 value={job.detailed_background || ''}
                                 onChange={e => handleInputChange(job.id, 'detailed_background', e.target.value)}
-                                placeholder="Add more details, achievements, or context about this role..."
+                                placeholder="[Optional] Add more details, achievements, or context about this role. This greatly helps tailor your resume."
                                 rows={6}
                                 className="styled-scrollbar w-full h-full min-h-[150px] p-3 bg-slate-900 border border-slate-700 rounded-md text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
                             />
                         </div>
                     </div>
                 </div>
-            ))}
+              );
+            })}
         </div>
       </div>
     </div>

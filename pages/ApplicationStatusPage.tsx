@@ -32,11 +32,44 @@ const ApplicationStatusPage: React.FC = () => {
   const [isAnalysisLoading, setIsAnalysisLoading] = useState(true);
   const [initialScore, setInitialScore] = useState<number | null>(null);
   const [initialRawScoreCsv, setInitialRawScoreCsv] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
 
   const initialAnalysisRef = useRef<string | null>(null);
   const appStatusIntervalRef = useRef<number | null>(null);
   const analysisIntervalRef = useRef<number | null>(null);
   const messageIntervalRef = useRef<number | null>(null);
+  const progressIntervalRef = useRef<number | null>(null);
+
+  // Simulated progress bar: random increments, roughly 16 seconds to reach ~80%
+  useEffect(() => {
+    const tickMs = 400;
+    const maxBeforeCompletion = 80;
+    const randomIncrement = () => 1 + Math.random() * 2; // 1-3% bumps keep pace but feel organic
+
+    const updateProgress = () => {
+      setProgress(prev => {
+        if (prev >= maxBeforeCompletion) {
+          if (progressIntervalRef.current) {
+            clearInterval(progressIntervalRef.current);
+            progressIntervalRef.current = null;
+          }
+          return prev;
+        }
+        const next = Math.min(maxBeforeCompletion, prev + randomIncrement());
+        return next;
+      });
+    };
+
+    updateProgress();
+    progressIntervalRef.current = window.setInterval(updateProgress, tickMs);
+
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   // Poll for resume check analysis
   useEffect(() => {
@@ -94,6 +127,7 @@ const ApplicationStatusPage: React.FC = () => {
         if (response.status === 'completed') {
           if (appStatusIntervalRef.current) clearInterval(appStatusIntervalRef.current);
           if (messageIntervalRef.current) clearInterval(messageIntervalRef.current);
+          setProgress(100);
           addToast('Your tailored resume is ready!', 'success');
           navigate(`/results/${applicationId}`, {
             state: {
@@ -106,12 +140,14 @@ const ApplicationStatusPage: React.FC = () => {
         } else if (response.status === 'failed') {
           if (appStatusIntervalRef.current) clearInterval(appStatusIntervalRef.current);
           if (messageIntervalRef.current) clearInterval(messageIntervalRef.current);
+          setProgress(100);
           addToast('Something went wrong while tailoring your resume.', 'error');
           navigate('/dashboard');
         }
       } catch (error: any) {
         if (appStatusIntervalRef.current) clearInterval(appStatusIntervalRef.current);
         if (messageIntervalRef.current) clearInterval(messageIntervalRef.current);
+        setProgress(100);
         addToast(error.message || 'Failed to check application status.', 'error');
         navigate('/dashboard');
       }
@@ -121,7 +157,7 @@ const ApplicationStatusPage: React.FC = () => {
     appStatusIntervalRef.current = window.setInterval(pollStatus, 4000);
     messageIntervalRef.current = window.setInterval(() => {
       setCurrentMessageIndex(prevIndex => (prevIndex + 1) % loadingMessages.length);
-    }, 2500);
+    }, 5000);
 
 
     return () => {
@@ -133,7 +169,7 @@ const ApplicationStatusPage: React.FC = () => {
   return (
     <div className="flex flex-col justify-center items-center min-h-screen bg-slate-900 text-slate-100 p-4">
         <div className="w-full max-w-4xl mx-auto flex-grow flex flex-col justify-center">
-             <div className="flex items-center justify-center space-x-3 p-3 mb-8 bg-slate-800/50 rounded-lg">
+             <div className="flex items-center justify-center space-x-3 p-3 mb-6 bg-slate-800/50 rounded-lg">
                 <LoadingSpinner size="sm" />
                 <div className="text-left">
                     <h2 className="text-xl font-bold text-slate-100">Tailoring in Progress...</h2>
@@ -141,6 +177,18 @@ const ApplicationStatusPage: React.FC = () => {
                         {loadingMessages[currentMessageIndex]}
                     </p>
                 </div>
+            </div>
+            <div className="mb-8">
+              <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 transition-all duration-500"
+                  style={{ width: `${Math.min(progress, 100)}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-xs text-slate-400 mt-2">
+                <span>Progress</span>
+                <span>{Math.round(progress)}%</span>
+              </div>
             </div>
 
             <div className="text-left mb-6">
