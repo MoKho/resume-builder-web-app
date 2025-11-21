@@ -3,9 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import { processResume, getResumeText, getGoogleDriveAuthStatus, getGoogleDriveAuthorizeUrl, openGoogleDriveFile, uploadResumeFile, API_BASE_URL } from '../../services/api';
-import Logo from '../../components/Logo';
+import Layout from '../../components/Layout';
 import LoadingSpinner from '../../components/LoadingSpinner';
-import GoogleDriveIcon from '../../components/GoogleDriveIcon';
 import { useGooglePicker } from '../../hooks/useGooglePicker';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
@@ -141,24 +140,23 @@ const GoogleDriveImportSection: React.FC<{
   }, [session, isPickerApiLoaded, addToast, getAccessToken, setIsImporting]);
 
   return (
-    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="flex flex-col gap-4">
       <div>
         <h2 className="text-xl font-semibold">Import from Google Drive</h2>
-        <p className="text-slate-400 mt-1">Recommended: Fast, accurate formatting, and fewer copy/paste errors.</p>
+        <p className="text-slate-400 mt-1">Original formatting, and fewer copy/paste errors.</p>
       </div>
-      <button
-        onClick={handleImportFromDrive}
-        disabled={isLoading || isFetchingResume || isImporting}
-        className="flex-shrink-0 inline-flex items-center justify-center px-5 py-2.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow"
-      >
-        {isImporting ? (
-          <LoadingSpinner size="sm" />
-        ) : (
-          <>
-            <GoogleDriveIcon className="w-5 h-5 mr-2" /> Connect Google Drive
-          </>
-        )}
-      </button>
+      <div>
+        <button
+          onClick={handleImportFromDrive}
+          disabled={isLoading || isFetchingResume || isImporting}
+          className="inline-flex items-center justify-center px-5 py-2.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow"
+        >
+            <>
+              <span aria-hidden="true" className="material-symbols-outlined mr-2 align-middle text-[24px]">add_to_drive</span>
+              Connect Google Drive
+            </>
+        </button>
+      </div>
     </div>
   );
 };
@@ -168,8 +166,11 @@ const Step1ResumePage: React.FC = () => {
   const enableGoogleImport: boolean = (() => {
     try {
       const raw = (import.meta as any)?.env?.VITE_ENABLE_GOOGLE_IMPORT;
-      if (raw === undefined || raw === null || raw === '') return false; // default Off
-      return ['1', 'true', 'yes', 'on'].includes(String(raw).toLowerCase());
+      const normalized = String(raw ?? '').trim().toLowerCase();
+      if (!normalized) return true; // default ON when not specified
+      if (normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'off') return false;
+      if (normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on') return true;
+      return false;
     } catch {
       return true;
     }
@@ -245,10 +246,10 @@ const Step1ResumePage: React.FC = () => {
     if (!file) return;
     if (!session) return;
 
-    const allowed = ['pdf', 'doc', 'docx', 'txt', 'md'];
+    const allowed = ['doc', 'docx', 'txt', 'md'];
     const ext = file.name.split('.').pop()?.toLowerCase();
     if (!ext || !allowed.includes(ext)) {
-      addToast('Unsupported file type. Please upload pdf, doc, docx, txt, or md.', 'error');
+      addToast('Unsupported file type. Please upload doc, docx, txt, or md.', 'error');
       return;
     }
 
@@ -349,104 +350,126 @@ const Step1ResumePage: React.FC = () => {
 
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
+    <Layout>
       <style>{MARKDOWN_PREVIEW_STYLES}</style>
-      <div className="w-full max-w-3xl">
-        <div className="text-center mb-8">
-          <Logo />
-          <h1 className="text-3xl font-bold mt-4">Setup Your Profile</h1>
-          <p className="text-slate-400 mt-2">Step 1 of 2: Provide Your Master Resume</p>
+      {/* Page header with subtle progress indicator */}
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold">Setup Your Profile</h1>
+              <p className="text-slate-400 mt-1">Step 1 of 2: Provide Your Master Resume</p>
+            </div>
+            <div className="hidden sm:flex items-center gap-2">
+              <span className="text-xs text-slate-400">1/2</span>
+              <div className="w-28 h-2 bg-slate-700 rounded">
+                <div className="h-2 w-1/2 bg-teal-500 rounded"></div>
+              </div>
+            </div>
+          </div>
         </div>
-        {/* Actions */}
-        <div className="flex justify-end mb-6 space-x-4">
+
+        {/* Action bar */}
+        <div className="flex justify-end mb-6 gap-3">
           <button
             onClick={handleCancel}
             disabled={isLoading || !profile?.has_base_resume}
-            className="px-6 py-2 border border-slate-600 text-slate-300 rounded-md hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-5 py-2 border border-slate-600 text-slate-300 rounded-md hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
           <button
             onClick={handleNext}
             disabled={isLoading || isFetchingResume}
-            className="px-6 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-500 disabled:bg-teal-800 disabled:cursor-not-allowed transition-colors flex items-center"
+            className="px-6 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-500 disabled:bg-teal-800 disabled:cursor-not-allowed flex items-center"
           >
             {isLoading ? <LoadingSpinner size="sm" /> : 'Next'}
           </button>
         </div>
-        {/* Primary: Upload or Import */}
-        <div className="bg-slate-800 p-6 md:p-8 rounded-lg shadow-lg mb-6 relative">
+
+        {/* Primary: Upload or Import cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 relative">
           {isFetchingResume && (
-            <div className="absolute inset-0 bg-slate-800/70 flex justify-center items-center rounded-lg z-10">
+            <div className="absolute inset-0 bg-slate-900/60 flex justify-center items-center rounded-lg z-10">
               <LoadingSpinner size="md" />
             </div>
           )}
 
-          {/* Upload from device (moved to top) */}
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+          {/* Upload card */}
+          <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 shadow">
             <div>
               <h2 className="text-xl font-semibold">Upload from your device</h2>
-              <p className="text-slate-400 mt-1">PDF, DOC, DOCX, MD, or TXT supported.</p>
+              <p className="text-slate-400 mt-1">DOC, DOCX, MD, or TXT supported.</p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="mt-4">
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.doc,.docx,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+                accept=".doc,.docx,.txt,.md,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
                 onChange={handleLocalFileChange}
                 className="hidden"
               />
               <button
                 onClick={handleLocalFileClick}
                 disabled={isLoading || isFetchingResume || isImporting}
-                className="flex-shrink-0 inline-flex items-center justify-center px-5 py-2.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow"
+                className="inline-flex items-center justify-center px-5 py-2.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed shadow"
               >
-                {isImporting ? <LoadingSpinner size="sm" /> : 'Upload Resume File'}
+                <span aria-hidden="true" className="material-symbols-outlined mr-2 align-middle text-[24px]">upload</span>
+                Upload Resume File
               </button>
             </div>
           </div>
 
-          {/* Import from Google Drive (feature-flagged, avoids hook init when off) */}
-          {enableGoogleImport && (
-            <GoogleDriveImportSection
-              session={session}
-              addToast={addToast}
-              isLoading={isLoading}
-              isFetchingResume={isFetchingResume}
-              isImporting={isImporting}
-              setIsImporting={setIsImporting}
-              onFileSelected={handleFileSelected}
-            />
-          )}
-
-          {/* Preview when imported */}
-          {(importedFromDrive || importedFromUpload) && (
-            <div className="mt-4">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-medium">Imported Preview</h3>
-                <span className="text-xs text-slate-400">Editing is disabled for imported resumes</span>
+          {/* Google Drive card (feature-flagged) */}
+          {enableGoogleImport ? (
+            <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 shadow">
+              <GoogleDriveImportSection
+                session={session}
+                addToast={addToast}
+                isLoading={isLoading}
+                isFetchingResume={isFetchingResume}
+                isImporting={isImporting}
+                setIsImporting={setIsImporting}
+                onFileSelected={handleFileSelected}
+              />
+            </div>
+          ) : (
+            <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 shadow flex items-start">
+              <div>
+                <h2 className="text-xl font-semibold">Import from Google Drive</h2>
+                <p className="text-slate-400 mt-1">Currently disabled by configuration.</p>
               </div>
-              {importedHtml ? (
-                <div
-                  className="styled-scrollbar md-preview max-w-none bg-slate-900 border border-slate-700 rounded-md p-4"
-                  dangerouslySetInnerHTML={{ __html: importedHtml }}
-                />
-              ) : (
-                <textarea
-                  value={resumeText}
-                  readOnly
-                  className="styled-scrollbar w-full h-64 p-4 bg-slate-900 border border-slate-700 rounded-md text-slate-200"
-                />
-              )}
-              <p className="text-xs text-slate-400 mt-2">
-                We’ll use the plain text content for processing, preserving your original formatting when possible.
-              </p>
             </div>
           )}
         </div>
 
-        {/* Secondary: Manual paste (collapsed by default) */}
-        <div className="bg-slate-800 p-0 rounded-lg shadow-lg overflow-hidden">
+        {/* Preview when imported */}
+        {(importedFromDrive || importedFromUpload) && (
+          <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 shadow mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-medium">Imported Preview</h3>
+              <span className="text-xs text-slate-400">Editing is disabled for imported resumes</span>
+            </div>
+            {importedHtml ? (
+              <div
+                className="styled-scrollbar md-preview max-w-none bg-slate-900 border border-slate-700 rounded-md p-4"
+                dangerouslySetInnerHTML={{ __html: importedHtml }}
+              />
+            ) : (
+              <textarea
+                value={resumeText}
+                readOnly
+                className="styled-scrollbar w-full h-64 p-4 bg-slate-900 border border-slate-700 rounded-md text-slate-200"
+              />
+            )}
+            <p className="text-xs text-slate-400 mt-2">
+              We’ll use the plain text content for processing, preserving your original formatting when possible.
+            </p>
+          </div>
+        )}
+
+        {/* Secondary: Manual paste */}
+        <div className="bg-slate-800 p-0 rounded-lg border border-slate-700 shadow overflow-hidden">
           <button
             type="button"
             onClick={() => setManualOpen((v) => !v)}
@@ -456,20 +479,14 @@ const Step1ResumePage: React.FC = () => {
               <h2 className="text-lg font-semibold">Or paste your resume manually</h2>
               <p className="text-slate-400 mt-1">If you don’t use Google Drive, paste the full text below.</p>
             </div>
-            <span className="ml-4 text-slate-400 text-sm">
-              {manualOpen ? 'Hide' : 'Show'}
-            </span>
+            <span className="ml-4 text-slate-400 text-sm">{manualOpen ? 'Hide' : 'Show'}</span>
           </button>
           {manualOpen && (
             <div className="px-6 pb-6">
               <textarea
                 value={resumeText}
                 onChange={(e) => setResumeText(e.target.value)}
-                placeholder={
-                  isFetchingResume
-                    ? 'Loading your resume...'
-                    : 'Paste your full resume here...'
-                }
+                placeholder={isFetchingResume ? 'Loading your resume...' : 'Paste your full resume here...'}
                 className="styled-scrollbar w-full h-80 p-4 bg-slate-900 border border-slate-700 rounded-md text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
                 disabled={isLoading || isFetchingResume || importedFromDrive || importedFromUpload}
               />
@@ -481,9 +498,8 @@ const Step1ResumePage: React.FC = () => {
             </div>
           )}
         </div>
-        
       </div>
-    </div>
+    </Layout>
   );
 };
 

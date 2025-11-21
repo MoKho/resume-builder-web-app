@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import type { JobHistoryResponse, JobHistoryUpdate } from '../../types';
 import { updateJobHistories, getAllJobHistories } from '../../services/api';
-import Logo from '../../components/Logo';
+import Layout from '../../components/Layout';
 import LoadingSpinner from '../../components/LoadingSpinner';
 
 const parseAchievementLines = (achievements?: string | null) =>
@@ -100,26 +100,26 @@ const Step2DetailsPage: React.FC = () => {
 
   if (isFetching) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
-        <Logo />
-        <div className="my-8">
-          <LoadingSpinner size="lg" />
+      <Layout>
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="my-4">
+            <LoadingSpinner size="lg" />
+          </div>
+          <p className="text-slate-400">Loading your job history...</p>
         </div>
-        <p className="text-slate-400">Loading your job history...</p>
-      </div>
+      </Layout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col items-center p-4">
-      <div className="w-full max-w-4xl">
-        <div className="text-center my-8">
-            <Logo />
-            <h1 className="text-3xl font-bold mt-4">Enhance Your Job History</h1>
-            <p className="text-slate-400 mt-2">Step 2 of 2: Add details and select defaults for tailoring.</p>
-            <p className="text-slate-500 mt-4 max-w-3xl mx-auto">
-              Providing extra context, such as project details, specific metrics, or team dynamics, helps our AI understand the full scope of your achievements. This rich detail allows for a more impactful and accurately tailored resume.
-            </p>
+    <Layout>
+      <div className="max-w-4xl mx-auto">
+        <div className="my-6">
+          <h1 className="text-2xl sm:text-3xl font-bold">Enhance Your Job History</h1>
+          <p className="text-slate-400 mt-1">Step 2 of 2: Add details and select defaults for tailoring.</p>
+          <p className="text-slate-500 mt-4">
+            Providing extra context, such as project details, specific metrics, or team dynamics, helps our AI understand the full scope of your achievements. This rich detail allows for a more impactful and accurately tailored resume.
+          </p>
         </div>
 
         <div className="flex justify-end mb-8 space-x-4">
@@ -197,7 +197,7 @@ const Step2DetailsPage: React.FC = () => {
             })}
         </div>
       </div>
-    </div>
+    </Layout>
   );
 };
 

@@ -1,24 +1,20 @@
 
 import React from 'react';
 
-const GoogleDriveIcon: React.FC<{ className?: string }> = ({ className }) => (
-    <svg 
-        xmlns="http://www.w3.org/2000/svg" 
-        className={className} 
-        width="24" 
-        height="24" 
-        viewBox="0 0 24 24" 
-        strokeWidth="2" 
-        stroke="currentColor" 
-        fill="none" 
-        strokeLinecap="round" 
-        strokeLinejoin="round"
+const GoogleDriveIcon: React.FC<{ className?: string; width?: number | string; height?: number | string }> = ({ className, width = 24, height = 24 }) => (
+    <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        width={width}
+        height={height}
+        className={className}
+        role="img"
+        aria-label="Google Drive"
     >
-       <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
-       <path d="M12 12l-3.5 -7l-7 0l3.5 7l7 0z"></path>
-       <path d="M12 12l3.5 7l7 0l-3.5 -7l-7 0z"></path>
-       <path d="M12 12l-6 0l-3.5 7l6 0"></path>
-       <path d="M12 12l6 0l3.5 7l-6 0"></path>
+        {/* Simplified 3-color Google Drive mark (left=blue, right=yellow, bottom=green) */}
+        <polygon points="12,2 3,9.5 7.5,15.5 16.5,15.5" fill="#4285F4" />
+        <polygon points="12,2 16.5,15.5 21,9.5" fill="#FBBC05" />
+        <polygon points="7.5,15.5 16.5,15.5 12,22" fill="#34A853" />
     </svg>
 );
 
