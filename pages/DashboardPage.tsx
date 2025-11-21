@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../hooks/useAuth';
@@ -10,6 +10,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 const DashboardPage: React.FC = () => {
   const [jobDescription, setJobDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
   
   const { session } = useAuth();
   const { addToast } = useToast();
@@ -57,7 +58,7 @@ const DashboardPage: React.FC = () => {
         <h1 className="text-4xl font-bold text-slate-100 mb-2">Tailor Your Resume</h1>
         <p className="text-lg text-slate-400 mb-8">Paste a job description below to get started.</p>
         
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <form ref={formRef} onSubmit={handleSubmit} className="space-y-8">
           <div className="p-6 bg-slate-800 rounded-lg shadow-lg">
             <label htmlFor="job-description" className="block text-lg font-medium text-slate-300 mb-2">
               Job Description
@@ -67,9 +68,18 @@ const DashboardPage: React.FC = () => {
               rows={12}
               value={jobDescription}
               onChange={(e) => setJobDescription(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (!isSubmitting) {
+                    formRef.current?.requestSubmit();
+                  }
+                }
+              }}
               placeholder="Paste the full job description here..."
               className="w-full p-3 bg-slate-900 border border-slate-700 rounded-md text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
             />
+            <p className="mt-2 text-sm text-slate-500">Press Enter to submit. Use Shift+Enter for a new line.</p>
           </div>
           
           <button
