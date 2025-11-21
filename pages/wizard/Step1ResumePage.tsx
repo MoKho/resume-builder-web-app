@@ -45,7 +45,7 @@ const GoogleDriveImportSection: React.FC<{
       // small number of times by fetching a new URL and reopening the popup.
       const MAX_RETRIES = 2;
 
-      const tryAuthorizeOnce = async (): Promise<{ success: boolean; invalidState?: boolean }> => {
+      const tryAuthorizeOnce = async (): Promise<{ success: boolean; invalidState?: boolean; cancelled?: boolean }> => {
         try {
           const { authorization_url } = await getGoogleDriveAuthorizeUrl(session.access_token);
 
@@ -92,7 +92,7 @@ const GoogleDriveImportSection: React.FC<{
                   resolved = true;
                   window.removeEventListener('message', handleAuthMessage);
                   // Allow a short delay for any in-flight message, then treat as cancelled.
-                  setTimeout(() => resolve({ success: false }), 500);
+                  setTimeout(() => resolve({ success: false, cancelled: true }), 500);
                 }
               }, 500);
             } else {
@@ -108,8 +108,10 @@ const GoogleDriveImportSection: React.FC<{
       };
 
       let authSuccessful = false;
+      let lastResult: { success: boolean; invalidState?: boolean; cancelled?: boolean } | null = null;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         const result = await tryAuthorizeOnce();
+        lastResult = result;
         if (result.success) {
           authSuccessful = true;
           break;
@@ -126,12 +128,18 @@ const GoogleDriveImportSection: React.FC<{
           getAccessToken();
         }, 300);
       } else {
-        // Only show cancelled message if it wasn't a failure from the callback
-        const statusAfterAuth = await getGoogleDriveAuthStatus(session.access_token);
-        if (!statusAfterAuth.authenticated) {
-          addToast('Google Drive authentication cancelled or failed.', 'info');
+        // If user explicitly cancelled (closed popup), skip extra status check for faster UI recovery.
+        if (lastResult?.cancelled) {
+          addToast('Google Drive authentication cancelled.', 'info');
+          setIsImporting(false);
+        } else {
+          // Only show cancelled message if it wasn't a failure from the callback
+          const statusAfterAuth = await getGoogleDriveAuthStatus(session.access_token);
+            if (!statusAfterAuth.authenticated) {
+              addToast('Google Drive authentication cancelled or failed.', 'info');
+            }
+          setIsImporting(false);
         }
-        setIsImporting(false);
       }
     } catch (error: any) {
       addToast(error.message || 'Could not connect to Google Drive.', 'error');
