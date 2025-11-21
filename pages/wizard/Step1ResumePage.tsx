@@ -150,8 +150,7 @@ const GoogleDriveImportSection: React.FC<{
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h2 className="text-xl font-semibold">Import from Google Drive</h2>
-        <p className="text-slate-400 mt-1">Original formatting, and fewer copy/paste errors.</p>
+        <h2 className="text-xl font-semibold">Google Drive</h2>
       </div>
       <div>
         <button
@@ -407,7 +406,6 @@ const Step1ResumePage: React.FC = () => {
           <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 shadow">
             <div>
               <h2 className="text-xl font-semibold">Upload from your device</h2>
-              <p className="text-slate-400 mt-1">DOC, DOCX, MD, or TXT supported.</p>
             </div>
             <div className="mt-4">
               <input

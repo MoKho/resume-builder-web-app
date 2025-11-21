@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import type { JobHistoryResponse, JobHistoryUpdate } from '../../types';
-import { updateJobHistories, getAllJobHistories } from '../../services/api';
+import { updateJobHistories, getAllJobHistories, getResumeText, processResume } from '../../services/api';
 import Layout from '../../components/Layout';
 import LoadingSpinner from '../../components/LoadingSpinner';
 
@@ -22,18 +22,20 @@ const Step2DetailsPage: React.FC = () => {
   const [originalJobHistories, setOriginalJobHistories] = useState<JobHistoryResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false); // For submit button
   const [isFetching, setIsFetching] = useState(true); // For initial page load
+  const [isReprocessing, setIsReprocessing] = useState(false); // For resume reprocess flow
+
+  // Helper: apply default selections (first two) if none already chosen
+  const applyDefaultSelections = (histories: JobHistoryResponse[]) => {
+    if (histories.length <= 2) return histories;
+    const alreadySelected = histories.filter(job => !!job.is_default_rewrite).length;
+    if (alreadySelected > 0) return histories;
+    return histories.map((job, index) =>
+      index < 2 ? { ...job, is_default_rewrite: true } : job
+    );
+  };
 
   useEffect(() => {
     if (!session) return;
-
-    const applyDefaultSelections = (histories: JobHistoryResponse[]) => {
-      if (histories.length <= 2) return histories;
-      const alreadySelected = histories.filter(job => !!job.is_default_rewrite).length;
-      if (alreadySelected > 0) return histories;
-      return histories.map((job, index) =>
-        index < 2 ? { ...job, is_default_rewrite: true } : job
-      );
-    };
 
     const fetchJobHistories = async () => {
       setIsFetching(true);
@@ -60,6 +62,35 @@ const Step2DetailsPage: React.FC = () => {
   };
   
   const handleBack = () => navigate('/wizard/step-1');
+
+  const handleReprocess = async () => {
+    if (!session) return;
+    setIsReprocessing(true);
+    try {
+      // Fetch stored resume text
+      const resumeResp = await getResumeText(session.access_token);
+      const raw = (resumeResp?.resume_text || '').trim();
+      if (!raw) {
+        addToast('No stored resume found. Please go back and upload.', 'error');
+        navigate('/wizard/step-1');
+        return;
+      }
+
+      // Re-run processing even if unchanged
+      await processResume(session.access_token, { resume_text: raw });
+
+      // Refetch job histories after reprocess
+      const refreshed = await getAllJobHistories(session.access_token);
+      const withDefaults = applyDefaultSelections(refreshed);
+      setJobHistories(withDefaults);
+      setOriginalJobHistories(JSON.parse(JSON.stringify(refreshed))); // Keep original raw for comparison
+      addToast('Resume reprocessed. Job histories refreshed.', 'success');
+    } catch (err: any) {
+      addToast(err.message || 'Failed to reprocess resume.', 'error');
+    } finally {
+      setIsReprocessing(false);
+    }
+  };
 
   const handleFinish = async () => {
     if (!session) return;
@@ -115,27 +146,48 @@ const Step2DetailsPage: React.FC = () => {
     <Layout>
       <div className="max-w-4xl mx-auto">
         <div className="my-6">
-          <h1 className="text-2xl sm:text-3xl font-bold">Enhance Your Job History</h1>
-          <p className="text-slate-400 mt-1">Step 2 of 2: Add details and select defaults for tailoring.</p>
-          <p className="text-slate-500 mt-4">
-            Providing extra context, such as project details, specific metrics, or team dynamics, helps our AI understand the full scope of your achievements. This rich detail allows for a more impactful and accurately tailored resume.
-          </p>
+          <div className="flex items-start gap-2">
+            <h1 className="text-2xl sm:text-3xl font-bold flex items-center">Enhance Your Job History
+              <span className="relative group inline-flex ml-2">
+                <span className="material-symbols-outlined text-slate-400 text-[20px] cursor-help">info</span>
+                <span className="absolute left-1/2 -translate-x-1/2 mt-6 w-72 bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded-md p-3 opacity-0 group-hover:opacity-100 pointer-events-none shadow-lg transition-opacity z-20">
+                  Step 2 lets you enrich each role with optional context and pick which roles are defaults for tailoring. If a role was parsed incorrectly, you can try a quick reprocess without losing any added details.
+                </span>
+              </span>
+            </h1>
+          </div>
+          <p className="text-slate-400 mt-1">Step 2 of 2: Add context and select defaults for tailoring.</p>
         </div>
+
+        
 
         <div className="flex justify-end mb-8 space-x-4">
           <button
             onClick={handleBack}
-            disabled={isLoading}
+            disabled={isLoading || isReprocessing}
             className="px-6 py-2 border border-slate-600 text-slate-300 rounded-md hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Back
           </button>
+          <div className="relative group inline-flex">
+            <button
+              onClick={handleReprocess}
+              disabled={isLoading || isReprocessing}
+              className="px-6 py-2 border border-slate-600 text-slate-300 rounded-md hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              aria-label="Reprocess resume to refresh roles"
+            >
+              {isReprocessing ? <LoadingSpinner size="sm" /> : 'Reprocess'}
+            </button>
+            <span className="absolute left-1/2 -translate-x-1/2 mt-12 w-64 bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded-md p-3 opacity-0 group-hover:opacity-100 pointer-events-none shadow-lg transition-opacity z-20">
+              Rarely needed. Runs the extractor again on your stored resume text. Your added role details are preserved.
+            </span>
+          </div>
           <button
             onClick={handleFinish}
-            disabled={isLoading}
+            disabled={isLoading || isReprocessing}
             className="px-6 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-500 disabled:bg-teal-800 disabled:cursor-not-allowed transition-colors flex items-center"
           >
-            {isLoading ? <LoadingSpinner size="sm" /> : 'Save and Finish'}
+            {isLoading ? <LoadingSpinner size="sm" /> : 'Save'}
           </button>
         </div>
 
@@ -188,7 +240,8 @@ const Step2DetailsPage: React.FC = () => {
                                 onChange={e => handleInputChange(job.id, 'detailed_background', e.target.value)}
                                 placeholder="[Optional] Add more details, achievements, or context about this role. This greatly helps tailor your resume."
                                 rows={6}
-                                className="styled-scrollbar w-full h-full min-h-[150px] p-3 bg-slate-900 border border-slate-700 rounded-md text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                className="styled-scrollbar w-full h-full min-h-[150px] p-3 bg-slate-900 border border-slate-700 rounded-md text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50"
+                                disabled={isReprocessing}
                             />
                         </div>
                     </div>
@@ -197,6 +250,14 @@ const Step2DetailsPage: React.FC = () => {
             })}
         </div>
       </div>
+      {isReprocessing && (
+        <div className="fixed inset-0 bg-slate-900/70 flex items-center justify-center z-40">
+          <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 flex flex-col items-center">
+            <LoadingSpinner size="lg" />
+            <p className="mt-4 text-slate-300">Reprocessing resume...</p>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 };
