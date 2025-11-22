@@ -364,7 +364,7 @@ const ResultsPage: React.FC = () => {
         </div>
 
         <div className="mt-12 border-t border-slate-700 pt-8">
-            <h2 className="text-3xl font-bold text-center text-slate-100 mb-8">Wanna Improve YouResume Analysis & Score Improvement</h2>
+            <h2 className="text-3xl font-bold text-center text-slate-100 mb-8">Final Resume Analysis & Score Improvement</h2>
             
             <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
                 <div className="flex flex-col sm:flex-row justify-around items-center mb-6 pb-6 border-b border-slate-700 gap-4">
