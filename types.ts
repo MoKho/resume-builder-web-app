@@ -30,6 +30,13 @@ export interface ResumeTextResponse {
   resume_text: string;
 }
 
+// New: response shape for process-resume including optional summary and skills blocks.
+export interface ResumeProcessResponse {
+  jobs: JobHistoryResponse[];
+  summary: string | null;
+  skills: string | null;
+}
+
 export interface ApplicationCreate {
   target_job_description: string;
 }

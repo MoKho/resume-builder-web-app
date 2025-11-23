@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
 import type { JobHistoryResponse, JobHistoryUpdate } from '../../types';
 import { updateJobHistories, getAllJobHistories, getResumeText, processResume } from '../../services/api';
+import type { ResumeProcessResponse } from '../../types';
 import Layout from '../../components/Layout';
 import LoadingSpinner from '../../components/LoadingSpinner';
 
@@ -23,6 +24,11 @@ const Step2DetailsPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false); // For submit button
   const [isFetching, setIsFetching] = useState(true); // For initial page load
   const [isReprocessing, setIsReprocessing] = useState(false); // For resume reprocess flow
+  const [summary, setSummary] = useState<string | null>(null);
+  const [skills, setSkills] = useState<string | null>(null);
+  // Collapsible preview sections
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [skillsOpen, setSkillsOpen] = useState(false);
 
   // Helper: apply default selections (first two) if none already chosen
   const applyDefaultSelections = (histories: JobHistoryResponse[]) => {
@@ -40,10 +46,13 @@ const Step2DetailsPage: React.FC = () => {
     const fetchJobHistories = async () => {
       setIsFetching(true);
       try {
-        const data = await getAllJobHistories(session.access_token);
+        const resp = await getAllJobHistories(session.access_token);
+        const data = resp.jobs || [];
         const withDefaults = applyDefaultSelections(data);
         setJobHistories(withDefaults);
         setOriginalJobHistories(JSON.parse(JSON.stringify(data))); // Deep copy for comparison
+        setSummary(resp.summary || null);
+        setSkills(resp.skills || null);
       } catch (error: any) {
         addToast(error.message || 'Failed to fetch job history.', 'error');
         navigate('/wizard/step-1');
@@ -77,13 +86,13 @@ const Step2DetailsPage: React.FC = () => {
       }
 
       // Re-run processing even if unchanged
-      await processResume(session.access_token, { resume_text: raw });
-
-      // Refetch job histories after reprocess
-      const refreshed = await getAllJobHistories(session.access_token);
+      const resp: ResumeProcessResponse = await processResume(session.access_token, { resume_text: raw });
+      const refreshed = resp.jobs || [];
       const withDefaults = applyDefaultSelections(refreshed);
       setJobHistories(withDefaults);
       setOriginalJobHistories(JSON.parse(JSON.stringify(refreshed))); // Keep original raw for comparison
+      setSummary(resp.summary || null);
+      setSkills(resp.skills || null);
       addToast('Resume reprocessed. Job histories refreshed.', 'success');
     } catch (err: any) {
       addToast(err.message || 'Failed to reprocess resume.', 'error');
@@ -158,7 +167,62 @@ const Step2DetailsPage: React.FC = () => {
           </div>
           <p className="text-slate-400 mt-1">Step 2 of 2: Add context and select defaults for tailoring.</p>
         </div>
-
+        {/* New: Summary & Skills Preview (shown if available) */}
+        {(summary || skills) && (
+          <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+            {summary && (
+              <div className="bg-slate-800 rounded-lg border border-slate-700 shadow flex flex-col">
+                <button
+                  type="button"
+                  onClick={() => setSummaryOpen(o => !o)}
+                  aria-expanded={summaryOpen}
+                  className="flex items-center justify-between w-full px-5 py-4 text-left hover:bg-slate-750/50 transition-colors"
+                >
+                  <span className="text-lg font-semibold">Professional Summary</span>
+                  <span className="material-symbols-outlined text-slate-400 text-[20px]">{summaryOpen ? 'expand_less' : 'expand_more'}</span>
+                </button>
+                {summaryOpen && (
+                  <div className="px-5 pb-5">
+                    <p className="text-sm text-slate-200 whitespace-pre-line leading-relaxed styled-scrollbar overflow-auto max-h-60 pr-1">
+                      {summary}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+            {skills && (
+              <div className="bg-slate-800 rounded-lg border border-slate-700 shadow flex flex-col">
+                <button
+                  type="button"
+                  onClick={() => setSkillsOpen(o => !o)}
+                  aria-expanded={skillsOpen}
+                  className="flex items-center justify-between w-full px-5 py-4 text-left hover:bg-slate-750/50 transition-colors"
+                >
+                  <span className="text-lg font-semibold">Skills Extracted</span>
+                  <span className="material-symbols-outlined text-slate-400 text-[20px]">{skillsOpen ? 'expand_less' : 'expand_more'}</span>
+                </button>
+                {skillsOpen && (
+                  <div className="px-5 pb-5">
+                    <div className="text-sm text-slate-200 leading-relaxed styled-scrollbar overflow-auto max-h-60 pr-1">
+                      {(() => {
+                        const raw = skills || '';
+                        const parts = raw.includes('\n') ? raw.split(/\r?\n+/) : raw.split(/[,;]+/);
+                        const cleaned = parts.map(p => p.trim()).filter(Boolean);
+                        return cleaned.length > 1 ? (
+                          <ul className="list-disc list-inside space-y-1">
+                            {cleaned.map((s, i) => <li key={`skill-${i}`}>{s}</li>)}
+                          </ul>
+                        ) : (
+                          <p>{raw}</p>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         
 
         <div className="flex justify-end mb-8 space-x-4">

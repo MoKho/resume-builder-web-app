@@ -14,6 +14,7 @@ import type {
   GoogleDriveFileRequest,
   GoogleDriveFileResponse,
   UploadResumeResponse,
+  ResumeProcessResponse,
 } from '../types';
 
 // Default to production API; can be overridden by VITE_API_BASE_URL
@@ -47,7 +48,7 @@ export const getMyProfile = (token: string): Promise<ProfileResponse> => {
   return apiFetch('/profiles/me', token, { method: 'GET' });
 };
 
-export const processResume = (token: string, data: ResumeUpload): Promise<JobHistoryResponse[]> => {
+export const processResume = (token: string, data: ResumeUpload): Promise<ResumeProcessResponse> => {
   return apiFetch('/profiles/process-resume', token, {
     method: 'POST',
     body: JSON.stringify(data),
@@ -58,7 +59,7 @@ export const getResumeText = (token: string): Promise<ResumeTextResponse> => {
   return apiFetch('/profiles/resume-text', token, { method: 'GET' });
 };
 
-export const getAllJobHistories = (token: string): Promise<JobHistoryResponse[]> => {
+export const getAllJobHistories = (token: string): Promise<ResumeProcessResponse> => {
   return apiFetch('/profiles/job-histories', token, { method: 'GET' });
 };
 
