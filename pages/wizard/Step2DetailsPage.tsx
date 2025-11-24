@@ -30,6 +30,20 @@ const Step2DetailsPage: React.FC = () => {
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
 
+  // Feature flag (Vite): controls visibility of parsed summary & skills sections
+  const enableParsedSections: boolean = (() => {
+    try {
+      const raw = (import.meta as any)?.env?.VITE_ENABLE_PARSED_SECTIONS;
+      const normalized = String(raw ?? '').trim().toLowerCase();
+      if (!normalized) return false; // default OFF when not specified
+      if (['1','true','yes','on'].includes(normalized)) return true;
+      if (['0','false','no','off'].includes(normalized)) return false;
+      return false;
+    } catch {
+      return false;
+    }
+  })();
+
   // Helper: apply default selections (first two) if none already chosen
   const applyDefaultSelections = (histories: JobHistoryResponse[]) => {
     if (histories.length <= 2) return histories;
@@ -51,8 +65,13 @@ const Step2DetailsPage: React.FC = () => {
         const withDefaults = applyDefaultSelections(data);
         setJobHistories(withDefaults);
         setOriginalJobHistories(JSON.parse(JSON.stringify(data))); // Deep copy for comparison
-        setSummary(resp.summary || null);
-        setSkills(resp.skills || null);
+        if (enableParsedSections) {
+          setSummary(resp.summary || null);
+          setSkills(resp.skills || null);
+        } else {
+          setSummary(null);
+          setSkills(null);
+        }
       } catch (error: any) {
         addToast(error.message || 'Failed to fetch job history.', 'error');
         navigate('/wizard/step-1');
@@ -91,8 +110,10 @@ const Step2DetailsPage: React.FC = () => {
       const withDefaults = applyDefaultSelections(refreshed);
       setJobHistories(withDefaults);
       setOriginalJobHistories(JSON.parse(JSON.stringify(refreshed))); // Keep original raw for comparison
-      setSummary(resp.summary || null);
-      setSkills(resp.skills || null);
+      if (enableParsedSections) {
+        setSummary(resp.summary || null);
+        setSkills(resp.skills || null);
+      }
       addToast('Resume reprocessed. Job histories refreshed.', 'success');
     } catch (err: any) {
       addToast(err.message || 'Failed to reprocess resume.', 'error');
@@ -168,7 +189,7 @@ const Step2DetailsPage: React.FC = () => {
           <p className="text-slate-400 mt-1">Step 2 of 2: Add context and select defaults for tailoring.</p>
         </div>
         {/* New: Summary & Skills Preview (shown if available) */}
-        {(summary || skills) && (
+        {enableParsedSections && (summary || skills) && (
           <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
             {summary && (
               <div className="bg-slate-800 rounded-lg border border-slate-700 shadow flex flex-col">
