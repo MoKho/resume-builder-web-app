@@ -31,6 +31,8 @@ const ResultsPage: React.FC = () => {
   const [isLoadingNewAnalysis, setIsLoadingNewAnalysis] = useState(true);
   const analysisIntervalRef = useRef<number | null>(null);
   const analysisStartedRef = useRef(false); // Ref to track if analysis has been initiated
+  const initialAnalysisIntervalRef = useRef<number | null>(null);
+  const initialAnalysisStartedRef = useRef(false);
   const saveAsContainerRef = useRef<HTMLDivElement | null>(null); // For closing menu on outside click
 
   // Export (download) states
@@ -217,6 +219,36 @@ const ResultsPage: React.FC = () => {
     };
 
     fetchAllData();
+
+    // If we navigated here before the initial analysis completed on ApplicationStatusPage,
+    // resume polling for that initial check using resumeCheckJobId from location.state.
+    const resumeCheckJobId = location.state?.resumeCheckJobId as string | undefined;
+    const maybePollInitialAnalysis = async () => {
+      if (!session || !resumeCheckJobId || initialAnalysisStartedRef.current) return;
+      initialAnalysisStartedRef.current = true;
+      const pollInitial = async () => {
+        try {
+          const result = await getResumeCheckResult(session.access_token, resumeCheckJobId);
+          if (result.status === 'completed') {
+            if (initialAnalysisIntervalRef.current) clearInterval(initialAnalysisIntervalRef.current);
+            setInitialScore(result.score ?? null);
+            setInitialRawScoreCsv(result.raw_score_csv ?? null);
+          } else if (result.status === 'failed') {
+            if (initialAnalysisIntervalRef.current) clearInterval(initialAnalysisIntervalRef.current);
+            addToast('Failed to load initial resume score.', 'error');
+          }
+        } catch (e: any) {
+          if (initialAnalysisIntervalRef.current) clearInterval(initialAnalysisIntervalRef.current);
+          addToast(e.message || 'Failed to load initial resume score.', 'error');
+        }
+      };
+      await pollInitial();
+      initialAnalysisIntervalRef.current = window.setInterval(pollInitial, 3000);
+    };
+    // Only start if we don't already have an initial score
+    if (location.state?.resumeCheckJobId && initialScore == null) {
+      maybePollInitialAnalysis();
+    }
     
     // Silent HEAD /export readiness probe: try up to 10 times, every 1s
     let headTimer: number | null = null;
@@ -266,6 +298,7 @@ const ResultsPage: React.FC = () => {
     
     return () => {
       if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
+      if (initialAnalysisIntervalRef.current) clearInterval(initialAnalysisIntervalRef.current);
       if (statusTimer) window.clearTimeout(statusTimer);
       if (headTimer) window.clearTimeout(headTimer);
     }

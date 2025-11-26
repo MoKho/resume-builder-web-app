@@ -131,6 +131,7 @@ const ApplicationStatusPage: React.FC = () => {
           addToast('Your tailored resume is ready!', 'success');
           navigate(`/results/${applicationId}`, {
             state: {
+                resumeCheckJobId: location.state?.resumeCheckJobId,
                 initialAnalysis: initialAnalysisRef.current,
                 initialScore: initialScore,
                 initialRawScoreCsv: initialRawScoreCsv,
