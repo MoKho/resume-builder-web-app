@@ -44,11 +44,26 @@ const Step2DetailsPage: React.FC = () => {
     }
   })();
 
-  // Helper: apply default selections (first two) if none already chosen
+  // Helper: apply default selections when none already chosen
   const applyDefaultSelections = (histories: JobHistoryResponse[]) => {
-    if (histories.length <= 2) return histories;
+    const len = histories.length;
+    if (len === 0) return histories;
+
+    // If any are already selected, respect that and do nothing.
     const alreadySelected = histories.filter(job => !!job.is_default_rewrite).length;
     if (alreadySelected > 0) return histories;
+
+    // 1 job -> select it; 2 jobs -> select both; 3+ -> select first two.
+    if (len === 1) {
+      return histories.map((job, index) =>
+        index === 0 ? { ...job, is_default_rewrite: true } : job
+      );
+    }
+
+    if (len === 2) {
+      return histories.map(job => ({ ...job, is_default_rewrite: true }));
+    }
+
     return histories.map((job, index) =>
       index < 2 ? { ...job, is_default_rewrite: true } : job
     );
@@ -246,7 +261,7 @@ const Step2DetailsPage: React.FC = () => {
         )}
         
 
-        <div className="flex justify-end mb-8 space-x-4">
+        <div className="flex justify-end mb-4 space-x-4">
           <button
             onClick={handleBack}
             disabled={isLoading || isReprocessing}
@@ -275,6 +290,12 @@ const Step2DetailsPage: React.FC = () => {
             {isLoading ? <LoadingSpinner size="sm" /> : 'Save'}
           </button>
         </div>
+
+        {jobHistories.length > 0 && !jobHistories.some(job => job.is_default_rewrite) && (
+          <div className="mb-4 text-sm text-amber-300 bg-amber-900/40 border border-amber-600 rounded-md px-3 py-2">
+            If no jobs are selected for tailoring, only your professional summary and skills sections will be tailored to the job post, if available.
+          </div>
+        )}
 
         <div className="space-y-6">
           {jobHistories.map(job => {

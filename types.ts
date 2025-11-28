@@ -41,12 +41,27 @@ export interface ApplicationCreate {
   target_job_description: string;
 }
 
+export interface UpdatedWorkHistory {
+  id: number;
+  job_title: string;
+  company_name: string;
+  text: string;
+}
+
+export interface UpdatedFields {
+  professional_summary: string | null;
+  skills: string | null;
+  work_history: UpdatedWorkHistory[];
+}
+
 export interface ApplicationResponse {
   id: number;
   user_id: string;
   status: 'pending' | 'completed' | 'failed';
   target_job_description: string;
   final_resume_text: string | null;
+  gdrive_doc_resume_id?: string | null;
+  updated_fields?: UpdatedFields | null;
   created_at: string;
 }
 
