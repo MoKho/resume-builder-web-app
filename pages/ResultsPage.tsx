@@ -359,7 +359,7 @@ const ResultsPage: React.FC = () => {
   return (
     <Layout>
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-4xl font-bold text-slate-100 mb-6">Your Tailored Resume</h1>
+        <h1 className="text-4xl font-bold text-slate-100 mb-6">Tailored Resume</h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Main Content Column */}
@@ -367,19 +367,19 @@ const ResultsPage: React.FC = () => {
             <div className="bg-slate-800 p-6 rounded-lg shadow-lg relative">
               <div
                 className={`styled-scrollbar prose prose-sm sm:prose-base prose-invert max-w-none text-slate-300 leading-relaxed overflow-auto prose-headings:text-slate-100 prose-a:text-teal-400 hover:prose-a:text-teal-300 prose-strong:text-slate-100 prose-ul:list-disc prose-ul:pl-6 prose-li:marker:text-teal-400 transition-all duration-300 ease-in-out
-                  max-h-[60vh] lg:max-h-[500px] ${isPreviewExpanded ? 'lg:max-h-none lg:overflow-visible' : 'lg:overflow-hidden'}
+                  ${isPreviewExpanded ? 'max-h-none overflow-visible' : 'max-h-[200px] overflow-hidden'}
                 `}
                 dangerouslySetInnerHTML={{ __html: tailoredResumeHtml }}
               />
 
-              {/* Gradient Overlay (Desktop Only, Collapsed State) */}
+              {/* Gradient Overlay (Collapsed State) */}
               {!isPreviewExpanded && (
-                <div className="hidden lg:block absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-slate-800 to-transparent pointer-events-none rounded-b-lg" />
+                <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-slate-800 to-transparent pointer-events-none rounded-b-lg" />
               )}
             </div>
 
-            {/* Expand/Collapse Button (Desktop Only) */}
-            <div className="hidden lg:flex justify-center -mt-4 relative z-10">
+            {/* Expand/Collapse Button */}
+            <div className="flex justify-center -mt-4 relative z-10">
               <button
                 onClick={() => setIsPreviewExpanded(!isPreviewExpanded)}
                 className="flex items-center gap-2 px-6 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-full shadow-md transition-colors text-sm font-medium border border-slate-600"
