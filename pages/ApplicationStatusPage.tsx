@@ -4,8 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { getApplication, getResumeCheckResult } from '../services/api';
 import type { ApplicationResponse } from '../types';
-import LoadingSpinner from '../components/LoadingSpinner';
-import Logo from '../components/Logo';
+import Layout from '../components/Layout';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import ScoreDisplay from '../components/ScoreDisplay';
@@ -19,6 +18,24 @@ const loadingMessages = [
   "Finalizing your tailored resume...",
   "Almost there, just polishing the details..."
 ];
+
+const AnalysisSkeleton = () => (
+  <div className="animate-pulse space-y-8">
+    <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
+      <div className="w-32 h-32 rounded-full bg-slate-700/50 flex-shrink-0" />
+      <div className="flex-1 space-y-3 w-full">
+        <div className="h-6 bg-slate-700/50 rounded w-1/3" />
+        <div className="h-4 bg-slate-700/50 rounded w-full" />
+        <div className="h-4 bg-slate-700/50 rounded w-5/6" />
+      </div>
+    </div>
+    <div className="space-y-3">
+      <div className="h-4 bg-slate-700/50 rounded w-full" />
+      <div className="h-4 bg-slate-700/50 rounded w-11/12" />
+      <div className="h-4 bg-slate-700/50 rounded w-4/5" />
+    </div>
+  </div>
+);
 
 const ApplicationStatusPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -75,8 +92,8 @@ const ApplicationStatusPage: React.FC = () => {
   useEffect(() => {
     const resumeCheckJobId = location.state?.resumeCheckJobId;
     if (!resumeCheckJobId || !session) {
-        setIsAnalysisLoading(false);
-        return;
+      setIsAnalysisLoading(false);
+      return;
     };
 
     const pollAnalysis = async () => {
@@ -120,7 +137,7 @@ const ApplicationStatusPage: React.FC = () => {
       navigate('/dashboard');
       return;
     }
-    
+
     const pollStatus = async () => {
       try {
         const response = await getApplication(session.access_token, applicationId);
@@ -131,11 +148,11 @@ const ApplicationStatusPage: React.FC = () => {
           addToast('Your tailored resume is ready!', 'success');
           navigate(`/results/${applicationId}`, {
             state: {
-                resumeCheckJobId: location.state?.resumeCheckJobId,
-                initialAnalysis: initialAnalysisRef.current,
-                initialScore: initialScore,
-                initialRawScoreCsv: initialRawScoreCsv,
-                jobDescription: location.state?.jobDescription,
+              resumeCheckJobId: location.state?.resumeCheckJobId,
+              initialAnalysis: initialAnalysisRef.current,
+              initialScore: initialScore,
+              initialRawScoreCsv: initialRawScoreCsv,
+              jobDescription: location.state?.jobDescription,
             }
           });
         } else if (response.status === 'failed') {
@@ -153,7 +170,7 @@ const ApplicationStatusPage: React.FC = () => {
         navigate('/dashboard');
       }
     };
-    
+
     pollStatus();
     appStatusIntervalRef.current = window.setInterval(pollStatus, 4000);
     messageIntervalRef.current = window.setInterval(() => {
@@ -168,58 +185,72 @@ const ApplicationStatusPage: React.FC = () => {
   }, [id, session, navigate, addToast, location.state?.jobDescription, initialScore, initialRawScoreCsv]);
 
   return (
-    <div className="flex flex-col justify-center items-center min-h-screen bg-slate-900 text-slate-100 p-4">
-        <div className="w-full max-w-4xl mx-auto flex-grow flex flex-col justify-center">
-             <div className="flex items-center justify-center space-x-3 p-3 mb-6 bg-slate-800/50 rounded-lg">
-                <LoadingSpinner size="sm" />
-                <div className="text-left">
-                    <h2 className="text-xl font-bold text-slate-100">Tailoring in Progress...</h2>
-                    <p className="text-slate-400 mt-1 text-base transition-opacity duration-500">
-                        {loadingMessages[currentMessageIndex]}
-                    </p>
-                </div>
-            </div>
-            <div className="mb-8">
-              <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 transition-all duration-500"
-                  style={{ width: `${Math.min(progress, 100)}%` }}
-                />
-              </div>
-              <div className="flex justify-between text-xs text-slate-400 mt-2">
-                <span>Progress</span>
-                <span>{Math.round(progress)}%</span>
-              </div>
-            </div>
+    <Layout>
+      <div className="max-w-3xl mx-auto py-8 md:py-12 space-y-12">
+        {/* Progress Section */}
+        <div className="space-y-6 text-center max-w-2xl mx-auto">
+          <div className="space-y-2">
+            <h1 className="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-teal-200 to-emerald-400">
+              Tailoring Your Resume
+            </h1>
+            <p className="text-lg text-slate-400 h-8 flex items-center justify-center transition-all duration-500">
+              {loadingMessages[currentMessageIndex]}
+            </p>
+          </div>
 
-            <div className="text-left mb-6">
-                <h1 className="text-3xl font-bold text-slate-100">Initial Resume Analysis</h1>
-                <p className="text-slate-400">Here's how your current resume stacks up against the job description.</p>
+          <div className="relative pt-4">
+            <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden shadow-inner">
+              <div
+                className="h-full bg-gradient-to-r from-teal-500 to-emerald-400 transition-all duration-500 ease-out shadow-[0_0_10px_rgba(20,184,166,0.5)]"
+                style={{ width: `${Math.min(progress, 100)}%` }}
+              />
             </div>
-            <div className="bg-slate-800 p-6 rounded-lg shadow-lg text-left min-h-[300px] flex flex-col">
-              {isAnalysisLoading ? (
-                <div className="flex-grow flex flex-col justify-center items-center">
-                    <LoadingSpinner />
-                    <p className="mt-4 text-slate-400">Analyzing your resume...</p>
-                </div>
-              ) : (
-                <>
-                  <ScoreDisplay label="Match Score" score={initialScore} rawCsv={initialRawScoreCsv} />
-                  {analysisHtml ? (
-                    <div
-                      className="analysis-content styled-scrollbar prose prose-sm sm:prose-base prose-invert max-w-none text-slate-300 leading-relaxed overflow-auto flex-grow"
-                      dangerouslySetInnerHTML={{ __html: analysisHtml }}
-                    />
-                  ) : (
-                    <div className="flex-grow flex flex-col justify-center items-center text-slate-400">
-                        <p>Could not load resume analysis.</p>
-                    </div>
-                  )}
-                </>
-              )}
+            <div className="flex justify-between text-xs font-medium text-slate-500 uppercase tracking-wider mt-2">
+              <span>Progress</span>
+              <span>{Math.round(progress)}%</span>
             </div>
+          </div>
         </div>
-    </div>
+
+        {/* Analysis Section */}
+        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 md:p-8 shadow-xl backdrop-blur-sm">
+          <div className="mb-8 border-b border-slate-700/50 pb-4">
+            <h2 className="text-xl font-semibold text-slate-200 flex items-center gap-3">
+              Initial Resume Analysis
+              {isAnalysisLoading && (
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-teal-500"></span>
+                </span>
+              )}
+            </h2>
+            <p className="text-slate-400 text-sm mt-1">
+              Here's how your current resume stacks up against the job description.
+            </p>
+          </div>
+
+          <div className="min-h-[200px]">
+            {isAnalysisLoading ? (
+              <AnalysisSkeleton />
+            ) : (
+              <div className="animate-fade-in">
+                <ScoreDisplay label="Match Score" score={initialScore} rawCsv={initialRawScoreCsv} />
+                {analysisHtml ? (
+                  <div
+                    className="mt-8 analysis-content styled-scrollbar prose prose-sm sm:prose-base prose-invert max-w-none text-slate-300 leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: analysisHtml }}
+                  />
+                ) : (
+                  <div className="flex flex-col justify-center items-center text-slate-400 py-12">
+                    <p>Could not load resume analysis.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </Layout>
   );
 };
 
