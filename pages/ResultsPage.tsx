@@ -29,11 +29,106 @@ const ResultsPage: React.FC = () => {
   const [newRawScoreCsv, setNewRawScoreCsv] = useState<string | null>(null);
 
   const [isLoadingNewAnalysis, setIsLoadingNewAnalysis] = useState(true);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisStatusMessage, setAnalysisStatusMessage] = useState<string | null>(null);
   const analysisIntervalRef = useRef<number | null>(null);
   const analysisStartedRef = useRef(false); // Ref to track if analysis has been initiated
+  const isMountedRef = useRef(true);
   const initialAnalysisIntervalRef = useRef<number | null>(null);
   const initialAnalysisStartedRef = useRef(false);
   const saveAsContainerRef = useRef<HTMLDivElement | null>(null); // For closing menu on outside click
+
+  // Helper: startResumeCheck with retry/backoff (component scope)
+  const startResumeCheckWithRetry = async (token: string, data: any, attempts = 3, baseDelay = 1000) => {
+    let lastError: any = null;
+    for (let i = 1; i <= attempts; i++) {
+      if (!isMountedRef.current) break;
+      try {
+        setAnalysisStatusMessage(`Starting analysis (attempt ${i} of ${attempts})`);
+        const res = await startResumeCheck(token, data);
+        return res;
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`startResumeCheck attempt ${i} failed`, err);
+        if (i === attempts) break;
+        const delay = Math.floor(baseDelay * Math.pow(2, i - 1) * (0.75 + Math.random() * 0.5));
+        setAnalysisStatusMessage(`Retrying to start analysis in ${(delay / 1000).toFixed(1)}s (attempt ${i + 1})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    throw lastError;
+  };
+
+  const handleRetryStart = async () => {
+    if (!session || !application) return;
+    setAnalysisError(null);
+    setAnalysisStatusMessage('Retrying to start analysis...');
+    try {
+      await startAndPollAnalysis(session.access_token, location.state?.jobDescription ?? application.target_job_description, application.final_resume_text ?? '');
+    } catch (e) {
+      // startAndPollAnalysis surfaces errors; nothing further to do here
+    }
+  };
+
+  const startAndPollAnalysis = async (token: string, jobPost: string, resumeText: string) => {
+    if (analysisIntervalRef.current) {
+      clearInterval(analysisIntervalRef.current);
+      analysisIntervalRef.current = null;
+    }
+    setAnalysisError(null);
+    setIsLoadingNewAnalysis(true);
+    try {
+      const checkJob = await startResumeCheckWithRetry(token, { job_post: jobPost, resume_text: resumeText }, 3, 1000);
+      if (checkJob && checkJob.job_id) {
+        analysisStartedRef.current = true;
+        setAnalysisStatusMessage('Analysis started. Waiting for results...');
+
+        const pollNewAnalysis = async () => {
+          try {
+            const result = await getResumeCheckResult(token, checkJob.job_id);
+            if (result.status === 'completed') {
+              if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
+              setNewAnalysisHtml(await parseMarkdown(result.analysis));
+              setNewScore(result.score);
+              setNewRawScoreCsv(result.raw_score_csv);
+              setIsLoadingNewAnalysis(false);
+              setAnalysisStatusMessage(null);
+            } else if (result.status === 'failed') {
+              if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
+              addToast('Could not load tailored resume analysis.', 'error');
+              setNewAnalysisHtml('<p>Error loading analysis.</p>');
+              setIsLoadingNewAnalysis(false);
+              setAnalysisError('The analysis job failed on the server.');
+              setAnalysisStatusMessage(null);
+            } else {
+              setAnalysisStatusMessage('Analysis in progress...');
+            }
+          } catch (err: any) {
+            console.error('Error polling resume check result', err);
+            setAnalysisError(err.message || 'Error checking resume analysis. Retrying...');
+            setAnalysisStatusMessage('Error checking analysis; retrying...');
+          }
+        };
+
+        pollNewAnalysis();
+        analysisIntervalRef.current = window.setInterval(pollNewAnalysis, 3000);
+      } else {
+        const msg = 'Failed to start resume analysis: no job id returned.';
+        addToast(msg, 'error');
+        setIsLoadingNewAnalysis(false);
+        setAnalysisError(msg);
+        setAnalysisStatusMessage(null);
+      }
+    } catch (err: any) {
+      console.error('startResumeCheck failed after retries', err);
+      const userMsg = err?.message || 'Failed to start resume analysis after multiple attempts.';
+      addToast(userMsg, 'error');
+      setIsLoadingNewAnalysis(false);
+      setAnalysisError(userMsg);
+      setAnalysisStatusMessage(null);
+      throw err;
+    }
+  };
 
   // Export (download) states
   const [exportReady, setExportReady] = useState(false); // readiness based on HEAD /export (using pdf)
@@ -190,30 +285,10 @@ const ResultsPage: React.FC = () => {
 
         const jobDescription = location.state?.jobDescription;
         if (appData?.final_resume_text && jobDescription && !analysisStartedRef.current) {
-          analysisStartedRef.current = true; // Prevent this block from running again on re-renders
-
-          const checkJob = await startResumeCheck(session.access_token, {
-            job_post: jobDescription,
-            resume_text: appData.final_resume_text,
+          // Start analysis in background; errors will be surfaced in `analysisError`
+          startAndPollAnalysis(session.access_token, jobDescription, appData.final_resume_text).catch(() => {
+            // errors are handled inside startAndPollAnalysis; swallow here to avoid unhandled rejection warnings
           });
-
-          const pollNewAnalysis = async () => {
-            const result = await getResumeCheckResult(session.access_token, checkJob.job_id);
-            if (result.status === 'completed') {
-              if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
-              setNewAnalysisHtml(await parseMarkdown(result.analysis));
-              setNewScore(result.score);
-              setNewRawScoreCsv(result.raw_score_csv);
-              setIsLoadingNewAnalysis(false);
-            } else if (result.status === 'failed') {
-              if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
-              addToast('Could not load tailored resume analysis.', 'error');
-              setNewAnalysisHtml('<p>Error loading analysis.</p>');
-              setIsLoadingNewAnalysis(false);
-            }
-          };
-          pollNewAnalysis();
-          analysisIntervalRef.current = window.setInterval(pollNewAnalysis, 3000);
 
         } else if (!appData?.final_resume_text || !jobDescription) {
           // This case handles when analysis can't be started due to missing data.
@@ -311,6 +386,7 @@ const ResultsPage: React.FC = () => {
       if (initialAnalysisIntervalRef.current) clearInterval(initialAnalysisIntervalRef.current);
       if (statusTimer) window.clearTimeout(statusTimer);
       if (headTimer) window.clearTimeout(headTimer);
+      isMountedRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, session]);
@@ -457,6 +533,27 @@ const ResultsPage: React.FC = () => {
 
                 <div className="min-h-[24rem] flex flex-col">
                   <h3 className="text-xl font-semibold text-slate-200 mb-4">Tailored Resume Analysis</h3>
+                  {analysisError && (
+                    <div className="mb-4 p-3 rounded bg-red-700 text-red-100 text-sm flex items-center justify-between">
+                      <div className="mr-4">{analysisError}</div>
+                      <div>
+                        <button
+                          onClick={handleRetryStart}
+                          disabled={isLoadingNewAnalysis}
+                          className={`inline-flex items-center px-3 py-1 rounded text-sm font-medium transition-colors ${isLoadingNewAnalysis ? 'bg-red-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-500'}`}
+                        >
+                          Retry now
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {analysisStatusMessage && !analysisError && (
+                    <div className="mb-4 p-2 rounded bg-slate-700 text-slate-200 text-sm">
+                      {analysisStatusMessage}
+                    </div>
+                  )}
+
                   {isLoadingNewAnalysis ? (
                     <div className="flex-grow flex items-center justify-center">
                       <LoadingSpinner />
